@@ -1,0 +1,28 @@
+#ifndef TERRACOTTA_RENDER_CHUNKMESH_H_
+#define TERRACOTTA_RENDER_CHUNKMESH_H_
+
+#include <cstddef>
+#include "Shader.h"
+
+namespace terra {
+namespace render {
+
+class ChunkMesh {
+public:
+    ChunkMesh(unsigned int vao, unsigned int vbo, std::size_t vertex_count);
+    ChunkMesh(const ChunkMesh& other);
+    ChunkMesh& operator=(const ChunkMesh& other);
+
+    void Render(unsigned int model_uniform);
+    void Destroy();
+
+private:
+    unsigned int m_VAO;
+    unsigned int m_VBO;
+    std::size_t m_VertexCount;
+};
+
+} // ns render
+} // ns terra
+
+#endif
