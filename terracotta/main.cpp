@@ -26,11 +26,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "assets/stb_image.h"
 
-const std::string server = "127.0.0.1";
-const u16 port = 25565;
-const std::string username = "terracotta";
-const std::string password = "";
-
 GLuint CreateBlockVAO();
 GLFWwindow* InitializeWindow();
 
@@ -45,6 +40,33 @@ int main(int argc, char* argvp[]) {
 
     if (window == nullptr) {
         return 1;
+    }
+
+    std::string server = "127.0.0.1";
+    u16 port = 25565;
+    std::string username = "terracotta";
+    std::string password = "";
+
+    std::ifstream config_file("config.json");
+
+    if (config_file.is_open()) {
+        mc::json config_root;
+
+        try {
+            config_root = mc::json::parse(config_file);
+        } catch (mc::json::parse_error& e) {
+            std::cerr << e.what() << std::endl;
+            return 1;
+        }
+
+        mc::json login_node = config_root.value("login", mc::json());
+
+        if (login_node.is_object()) {
+            username = login_node.value("username", "");
+            password = login_node.value("password", "");
+            server = login_node.value("server", "");
+            port = login_node.value("port", static_cast<u16>(25565));
+        }
     }
 
     std::cout << "Checking layers" << std::endl;
