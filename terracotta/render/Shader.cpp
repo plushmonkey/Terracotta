@@ -12,11 +12,11 @@ bool CreateShader(GLenum type, const char* source, GLuint* shaderOut) {
     glCompileShader(shader);
 
     GLint success;
-    GLchar infoLog[512];
+    GLchar info_log[512];
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success) {
-        glGetShaderInfoLog(shader, sizeof(infoLog), nullptr, infoLog);
-        std::cout << "Shader error: " << std::endl << infoLog << std::endl;
+        glGetShaderInfoLog(shader, sizeof(info_log), nullptr, info_log);
+        std::cout << "Shader error: " << std::endl << info_log << std::endl;
         return false;
     }
 
@@ -32,15 +32,15 @@ bool CreateProgram(GLuint vertexShader, GLuint fragmentShader, GLuint* programOu
     glLinkProgram(program);
 
     GLint success;
-    GLchar infoLog[512];
+    GLchar info_log[512];
     glGetProgramiv(program, GL_LINK_STATUS, &success);
 
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
     if (!success) {
-        glGetProgramInfoLog(program, sizeof(infoLog), nullptr, infoLog);
-        std::cout << "Link error: " << std::endl << infoLog << std::endl;
+        glGetProgramInfoLog(program, sizeof(info_log), nullptr, info_log);
+        std::cout << "Link error: " << std::endl << info_log << std::endl;
         return false;
     }
 
@@ -56,40 +56,40 @@ Shader::Shader() {
 }
 
 bool Shader::Initialize(const char* vPath, const char* fPath) {
-    std::string vSource, fSource;
-    std::ifstream vFile, fFile;
+    std::string vertex_source, fragment_source;
+    std::ifstream vertex_file, fragment_file;
 
-    vFile.exceptions(std::ifstream::badbit);
-    fFile.exceptions(std::ifstream::badbit);
+    vertex_file.exceptions(std::ifstream::badbit);
+    fragment_file.exceptions(std::ifstream::badbit);
     try {
-        vFile.open(vPath);
-        fFile.open(fPath);
+        vertex_file.open(vPath);
+        fragment_file.open(fPath);
 
-        std::stringstream vStream, fStream;
-        vStream << vFile.rdbuf();
-        fStream << fFile.rdbuf();
+        std::stringstream vertex_stream, fragment_stream;
+        vertex_stream << vertex_file.rdbuf();
+        fragment_stream << fragment_file.rdbuf();
 
-        vFile.close();
-        fFile.close();
+        vertex_file.close();
+        fragment_file.close();
 
-        vSource = vStream.str();
-        fSource = fStream.str();
+        vertex_source = vertex_stream.str();
+        fragment_source = fragment_stream.str();
     } catch (std::ifstream::failure& e) {
         std::cerr << "Read error: " << e.what() << std::endl;
         return false;
     }
 
-    GLuint vShader, fShader;
-    if (!CreateShader(GL_VERTEX_SHADER, vSource.c_str(), &vShader)) {
+    GLuint vertex_shader, fragment_shader;
+    if (!CreateShader(GL_VERTEX_SHADER, vertex_source.c_str(), &vertex_shader)) {
         return false;
     }
 
-    if (!CreateShader(GL_FRAGMENT_SHADER, fSource.c_str(), &fShader)) {
-        glDeleteShader(vShader);
+    if (!CreateShader(GL_FRAGMENT_SHADER, fragment_source.c_str(), &fragment_shader)) {
+        glDeleteShader(vertex_shader);
         return false;
     }
 
-    return CreateProgram(vShader, fShader, &m_Program);
+    return CreateProgram(vertex_shader, fragment_shader, &m_Program);
 }
 
 GLuint Shader::GetUniform(const char* name) {

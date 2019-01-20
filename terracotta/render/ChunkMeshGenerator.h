@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 #include <mclib/common/Vector.h>
+#include <glm/glm.hpp>
 
 namespace std {
 template <> struct hash<mc::Vector3i> {
@@ -41,6 +42,8 @@ public:
     iterator end() { return m_ChunkMeshes.end(); }
 
 private:
+    int GetAmbientOcclusion(int side1, int side2, int corner);
+
     mc::world::World* m_World;
     std::unordered_map<mc::Vector3i, std::unique_ptr<terra::render::ChunkMesh>> m_ChunkMeshes;
 };

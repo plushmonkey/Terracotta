@@ -1,4 +1,4 @@
-#version 430
+#version 330
 
 in vec2 TexCoord;
 in vec3 varyingPosition;
@@ -15,7 +15,7 @@ out vec4 color;
 void main() {
 	vec3 diffuseSample = texture(texarray, vec3(TexCoord, texIndex)).xyz;
 	
-	diffuseSample = diffuseSample * varyingTint * 0.55;
+	diffuseSample = diffuseSample * varyingTint;
 	
 	color = vec4(diffuseSample, 1.0f);
 }

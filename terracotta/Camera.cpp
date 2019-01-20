@@ -46,22 +46,22 @@ void Camera::ProcessRotation(float xoffset, float yoffset) {
     m_Yaw += xoffset * m_MouseSensitivity;
     m_Pitch += yoffset * m_MouseSensitivity;
 
-    float MaxPitch = (float)glm::radians(89.0);
+    const float kMaxPitch = (float)glm::radians(89.0);
 
-    m_Pitch = std::min(std::max(m_Pitch, -MaxPitch), MaxPitch);
+    m_Pitch = std::min(std::max(m_Pitch, -kMaxPitch), kMaxPitch);
     
     UpdateVectors();
 }
 
 void Camera::ProcessZoom(float yoffset) {
-    float MinZoom = 1.0f;
-    float MaxZoom = 60.0f;
+    const float kMinZoom = 1.0f;
+    const float kMaxZoom = 60.0f;
 
-    if (m_Zoom >= MinZoom && m_Zoom <= MaxZoom) {
+    if (m_Zoom >= kMinZoom && m_Zoom <= kMaxZoom) {
         m_Zoom -= yoffset;
     }
 
-    m_Zoom = std::min(std::max(m_Zoom, MinZoom), MaxZoom);
+    m_Zoom = std::min(std::max(m_Zoom, kMinZoom), kMaxZoom);
 }
 
 glm::mat4 Camera::GetViewMatrix() const {

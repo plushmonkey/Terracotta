@@ -1,10 +1,11 @@
-#version 430
+#version 330
 
 layout (location = 0) in vec3 position;
 layout (location = 1) in vec3 normal;
 layout (location = 2) in vec2 texCoord;
 layout (location = 3) in uint inTexIndex;
 layout (location = 4) in vec3 tint;
+layout (location = 5) in uint ambientOcclusion;
 
 out vec2 TexCoord;
 out vec3 varyingPosition;
@@ -27,5 +28,5 @@ void main() {
 	varyingPosition = viewPos.xyz;
 	varyingNormal = normalMatrix * normal;
 	texIndex = inTexIndex;
-	varyingTint = tint;
+	varyingTint = tint * (0.55 + float(ambientOcclusion) * 0.15);
 }

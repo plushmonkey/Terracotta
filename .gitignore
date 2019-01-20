@@ -8,4 +8,7 @@ lib
 *.so
 *.o
 .vs
+*.sln
+*.vcxproj
+*.vcxproj.user
 

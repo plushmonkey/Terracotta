@@ -34,6 +34,11 @@ std::unique_ptr<BlockModel> BlockModel::FromJSON(const mc::json& model_json) {
         model->m_BottomPath = textures_node.value("down", "");
     }
 
+    // TODO: Remove this once water is implemented.
+    if (textures_node.value("particle", "") == "block/water_still") {
+        model->m_AllPath = "block/water_still";
+    }
+
     return model;
 }
 

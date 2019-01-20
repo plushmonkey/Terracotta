@@ -14,8 +14,12 @@ struct Vertex {
     glm::vec2 uv;
     u32 texture_index;
     glm::vec3 tint;
+    unsigned char ambient_occlusion;
 
-    Vertex(glm::vec3 pos, glm::vec3 normal, glm::vec2 uv, u32 tex_index, glm::vec3 tint) : position(pos), normal(normal), uv(uv), texture_index(tex_index), tint(tint) { }
+    Vertex(glm::vec3 pos, glm::vec3 normal, glm::vec2 uv, u32 tex_index, glm::vec3 tint, int ambient_occlusion) 
+        : position(pos), normal(normal), uv(uv), texture_index(tex_index), tint(tint), ambient_occlusion(static_cast<unsigned char>(ambient_occlusion)) 
+    {
+    }
 };
 
 namespace terra {
@@ -51,6 +55,14 @@ void ChunkMeshGenerator::OnChunkLoad(mc::world::ChunkPtr chunk, const mc::world:
     GenerateMesh(chunk, meta.x, index_y, meta.z);
 }
 
+int ChunkMeshGenerator::GetAmbientOcclusion(int side1, int side2, int corner) {
+    if (side1 && side2) {
+        return 0;
+    }
+
+    return 3 - (side1 + side2 + corner);
+}
+
 void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, int chunk_y, int chunk_z) {
     if (chunk == nullptr) return;
 
@@ -64,7 +76,8 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
             for (int x = 0; x < 16; ++x) {
                 const mc::Vector3i pos(x, y, z);
                 mc::block::BlockPtr block = chunk->GetBlock(pos);
-                if (block == nullptr || !block->IsSolid()) continue;
+                // TODO: Remove once water is implemented properly.
+                if (block == nullptr || (!block->IsSolid() && block->GetName() != "minecraft:water")) continue;
 
                 terra::block::BlockState* state = g_AssetCache->GetBlockState(block->GetType());
                 if (state == nullptr) continue;
@@ -75,18 +88,26 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
                 glm::vec3 tint(1.0f, 1.0f, 1.0f);
                 glm::vec3 side_tint(1.0f, 1.0f, 1.0f);
 
+                // TODO: Remove once water is implemented properly.
+                bool is_water = block->GetName() == "minecraft:water";
+
                 // Temporary until tint related data is parsed from model elements.
                 if (block->GetName().find("grass_block") != std::string::npos || block->GetName().find("leaves") != std::string::npos) {
                     double r = 137 / 255.0;
                     double g = 191 / 255.0;
-                    double b = 78 / 255.0;
+                    double b = 98 / 255.0;
 
                     tint = glm::vec3(r, g, b);
 
                     if (block->GetName().find("grass_block") == std::string::npos) {
                         side_tint = tint;
                     }
+                } else if (is_water) {
+                    tint = glm::vec3(0.1, 0.4, 0.8);
+                    side_tint = glm::vec3(0.1, 0.4, 0.8);
                 }
+
+                mc::Vector3i mc_pos = pos + world_base;
 
                 const glm::vec3 base = terra::math::VecToGLM(pos) + terra::math::VecToGLM(world_base);
 
@@ -98,17 +119,21 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
                     glm::vec3 top_left = base + glm::vec3(1, 1, 0);
                     glm::vec3 top_right = base + glm::vec3(1, 1, 1);
 
-                    auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::Top);
+                    int obl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, 1, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, -1))->IsSolid());
+                    int obr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, 1, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, 1))->IsSolid());
+                    int otl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, 1, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, -1))->IsSolid());
+                    int otr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, 1, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, 1))->IsSolid());
 
+                    auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::Top);
                     u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
 
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint);
-                    vertices.emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint);
-                    vertices.emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
+                    vertices.emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint, obr);
+                    vertices.emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
 
-                    vertices.emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint);
-                    vertices.emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint);
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint);
+                    vertices.emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
+                    vertices.emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint, otl);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
                 }
 
                 mc::block::BlockPtr below = chunk->GetBlock(pos - mc::Vector3i(0, 1, 0));
@@ -119,16 +144,21 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
                     glm::vec3 top_left = base + glm::vec3(0, 0, 0);
                     glm::vec3 top_right = base + glm::vec3(0, 0, 1);
 
+                    int obl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, -1, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, -1))->IsSolid());
+                    int obr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, -1, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, 1))->IsSolid());
+                    int otl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, -1, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, -1))->IsSolid());
+                    int otr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, -1, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, 1))->IsSolid());
+
                     auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::Bottom);
                     u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
 
-                    vertices.emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, side_tint);
-                    vertices.emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, side_tint);
-                    vertices.emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, side_tint);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, side_tint, obl);
+                    vertices.emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, side_tint, obr);
+                    vertices.emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, side_tint, otr);
 
-                    vertices.emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, side_tint);
-                    vertices.emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, side_tint);
-                    vertices.emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, side_tint);
+                    vertices.emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, side_tint, otr);
+                    vertices.emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, side_tint, otl);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, side_tint, obl);
                 }
 
                 mc::block::BlockPtr north = chunk->GetBlock(pos + mc::Vector3i(0, 0, -1));
@@ -139,16 +169,21 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
                     glm::vec3 top_left = base + glm::vec3(1, 1, 0);
                     glm::vec3 top_right = base + glm::vec3(0, 1, 0);
 
+                    int obl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, 0, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, -1, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, -1))->IsSolid());
+                    int obr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(0, -1, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 0, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, -1))->IsSolid());
+                    int otl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(0, 1, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 0, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, -1))->IsSolid());
+                    int otr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(0, 1, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 0, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, -1))->IsSolid());
+
                     auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::North);
                     u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
 
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint);
-                    vertices.emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint);
-                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
+                    vertices.emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint, obr);
+                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
 
-                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint);
-                    vertices.emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint);
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint);
+                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
+                    vertices.emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint, otl);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
                 }
 
                 mc::block::BlockPtr south = chunk->GetBlock(pos + mc::Vector3i(0, 0, 1));
@@ -159,16 +194,21 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
                     glm::vec3 top_left = base + glm::vec3(0, 1, 1);
                     glm::vec3 top_right = base + glm::vec3(1, 1, 1);
 
+                    int obl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, 0, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, -1, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, 1))->IsSolid());
+                    int obr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, 0, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(0, -1, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, 1))->IsSolid());
+                    int otl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(0, 1, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 0, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, 1))->IsSolid());
+                    int otr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(0, 1, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 0, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, 1))->IsSolid());
+
                     auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::South);
                     u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
 
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, side_tint);
-                    vertices.emplace_back(bottom_right, glm::vec3(0, 0, 1), glm::vec2(1, 0), texture, side_tint);
-                    vertices.emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, side_tint);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, side_tint, obl);
+                    vertices.emplace_back(bottom_right, glm::vec3(0, 0, 1), glm::vec2(1, 0), texture, side_tint, obr);
+                    vertices.emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, side_tint, otr);
 
-                    vertices.emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, side_tint);
-                    vertices.emplace_back(top_left, glm::vec3(0, 0, 1), glm::vec2(0, 1), texture, side_tint);
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, side_tint);
+                    vertices.emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, side_tint, otr);
+                    vertices.emplace_back(top_left, glm::vec3(0, 0, 1), glm::vec2(0, 1), texture, side_tint, otl);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, side_tint, obl);
                 }
 
                 mc::block::BlockPtr east = chunk->GetBlock(pos + mc::Vector3i(1, 0, 0));
@@ -179,16 +219,21 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
                     glm::vec3 top_left = base + glm::vec3(1, 1, 1);
                     glm::vec3 top_right = base + glm::vec3(1, 1, 0);
 
+                    int obl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, 0, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, 1))->IsSolid());
+                    int obr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 0, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, -1, -1))->IsSolid());
+                    int otl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 0, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, 1))->IsSolid());
+                    int otr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 0, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(1, 1, -1))->IsSolid());
+
                     auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::East);
                     u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
 
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint);
-                    vertices.emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint);
-                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
+                    vertices.emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint, obr);
+                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
 
-                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint);
-                    vertices.emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint);
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint);
+                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
+                    vertices.emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint, otl);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
                 }
 
                 mc::block::BlockPtr west = chunk->GetBlock(pos + mc::Vector3i(-1, 0, 0));
@@ -199,16 +244,21 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
                     glm::vec3 top_left = base + glm::vec3(0, 1, 0);
                     glm::vec3 top_right = base + glm::vec3(0, 1, 1);
 
+                    int obl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 0, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, -1))->IsSolid());
+                    int obr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 0, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, -1, 1))->IsSolid());
+                    int otl = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 0, -1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, -1))->IsSolid());
+                    int otr = GetAmbientOcclusion(m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, 0))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 0, 1))->IsSolid(), m_World->GetBlock(mc_pos + mc::Vector3i(-1, 1, 1))->IsSolid());
+
                     auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::West);
                     u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
 
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint);
-                    vertices.emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint);
-                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
+                    vertices.emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint, obr);
+                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
 
-                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint);
-                    vertices.emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint);
-                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint);
+                    vertices.emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
+                    vertices.emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint, otl);
+                    vertices.emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
                 }
             }
         }
@@ -247,6 +297,10 @@ void ChunkMeshGenerator::GenerateMesh(mc::world::ChunkPtr chunk, int chunk_x, in
     // Tint
     glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
     glEnableVertexAttribArray(4);
+
+    // Ambient occlusion
+    glVertexAttribIPointer(5, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, ambient_occlusion));
+    glEnableVertexAttribArray(5);
 
     GLenum error;
 

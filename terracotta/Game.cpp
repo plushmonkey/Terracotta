@@ -27,9 +27,9 @@ mc::Vector3d Game::GetPosition() {
 
 
 void Game::Update() {
-    float currentFrame = (float)glfwGetTime();
-    m_DeltaTime = currentFrame - m_LastFrame;
-    m_LastFrame = currentFrame;
+    float current_frame = (float)glfwGetTime();
+    m_DeltaTime = current_frame - m_LastFrame;
+    m_LastFrame = current_frame;
     
 #ifdef WIN32
     std::string s = "Frame time: " + std::to_string(m_DeltaTime * 1000.0) + "ms\n";
@@ -41,7 +41,7 @@ void Game::Update() {
 
     auto pos = controller->GetPosition();
 
-    mc::Vector3d targetPos = pos;
+    mc::Vector3d target_pos = pos;
 
     if (m_Window.IsKeyDown(GLFW_KEY_W)) {
         m_Camera.ProcessMovement(terra::CameraMovement::Forward, m_DeltaTime);
@@ -50,7 +50,7 @@ void Game::Update() {
         front.y = 0;
         front = glm::normalize(front);
 
-        targetPos += mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed;
+        target_pos += mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_S)) {
@@ -60,25 +60,25 @@ void Game::Update() {
         front.y = 0;
         front = glm::normalize(front);
 
-        targetPos -= mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed;
+        target_pos -= mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_A)) {
         m_Camera.ProcessMovement(terra::CameraMovement::Left, m_DeltaTime);
         glm::vec3 right = m_Camera.GetRight();
 
-        targetPos -= mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed;
+        target_pos -= mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_D)) {
         m_Camera.ProcessMovement(terra::CameraMovement::Right, m_DeltaTime);
         glm::vec3 right = m_Camera.GetRight();
 
-        targetPos += mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed;
+        target_pos += mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed;
     }
 
     controller->SetMoveSpeed(4.3f);
-    controller->SetTargetPosition(targetPos);
+    controller->SetTargetPosition(target_pos);
 
     float yaw = m_Camera.GetYaw();
     float pitch = -m_Camera.GetPitch();

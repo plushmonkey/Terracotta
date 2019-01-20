@@ -145,7 +145,7 @@ bool AssetCache::LoadTextures(terra::assets::ZipArchive& archive) {
 
                             if (image == nullptr) continue;
 
-                            if (width == 16 && height == 16) {
+                            if (width == 16) {
                                 std::size_t size = 16 * 16 * 4;
                                 auto pos = texture_path.find_last_of('/');
                                 auto filename = texture_path.substr(pos + 1);
