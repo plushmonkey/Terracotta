@@ -27,6 +27,8 @@ std::size_t TextureArray::Append(const std::string& filename, const std::string&
     unsigned int index = m_Filenames.size();
     m_Filenames[filename] = index;
     m_TextureData.insert(m_TextureData.end(), texture.c_str(), texture.c_str() + texture.size());
+
+    return m_Filenames.size();
 }
 
 void TextureArray::Generate() {

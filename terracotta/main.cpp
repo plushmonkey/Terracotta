@@ -12,8 +12,8 @@
 #include <mclib/util/Utility.h>
 #include "render/Shader.h"
 #include "Camera.h"
-#include <GLFW/glfw3.h>
 #include "Game.h"
+#include "ChatWindow.h"
 #include "math/TypeUtil.h"
 
 #include "block/BlockFace.h"
@@ -22,6 +22,11 @@
 #include "render/ChunkMesh.h"
 #include "render/ChunkMeshGenerator.h"
 #include "assets/AssetCache.h"
+#include "lib/imgui/imgui.h"
+#include "lib/imgui/imgui_impl_glfw.h"
+#include "lib/imgui/imgui_impl_opengl3.h"
+
+#include <GLFW/glfw3.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "assets/stb_image.h"
@@ -91,6 +96,7 @@ int main(int argc, char* argvp[]) {
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+    glEnable(GL_MULTISAMPLE);
 
     terra::render::Shader shader;
 
@@ -131,8 +137,15 @@ int main(int argc, char* argvp[]) {
 
     terra::render::ChunkMeshGenerator mesh_gen(game.GetNetworkClient().GetWorld());
 
+    terra::ChatWindow chat(game.GetNetworkClient().GetDispatcher(), game.GetNetworkClient().GetConnection());
+
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
         game.Update();
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -179,6 +192,22 @@ int main(int argc, char* argvp[]) {
 
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
+
+        {
+            ImGui::SetNextWindowBgAlpha(0.3f);
+            ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+            ImGuiWindowFlags flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+            ImGui::Begin("debug_text", 0, flags);
+            
+            ImGui::Text("%.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
+            ImGui::End();
+        }
+
+        chat.Render();
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glBindVertexArray(0);
 
@@ -291,6 +320,7 @@ GLFWwindow* InitializeWindow() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, false);
+    glfwWindowHint(GLFW_SAMPLES, 4);
 
     GLFWwindow* window = glfwCreateWindow(960, 540, "Terracotta", nullptr, nullptr);
     if (window == nullptr) {
@@ -321,6 +351,12 @@ GLFWwindow* InitializeWindow() {
         game_window->OnMouseMove(x, y);
     });
 
+    std::cout << "Setting mouse button callback" << std::endl;
+    glfwSetMouseButtonCallback(window, [](GLFWwindow* window, int button, int action, int mods) {
+        terra::GameWindow* game_window = static_cast<terra::GameWindow*>(glfwGetWindowUserPointer(window));
+        game_window->OnMouseButton(button, action, mods);
+    });
+
     std::cout << "Setting scroll callback" << std::endl;
     glfwSetScrollCallback(window, [](GLFWwindow* window, double offset_x, double offset_y) {
         terra::GameWindow* game_window = static_cast<terra::GameWindow*>(glfwGetWindowUserPointer(window));
@@ -330,7 +366,7 @@ GLFWwindow* InitializeWindow() {
     std::cout << "Setting swap interval" << std::endl;
     glfwSwapInterval(0);
 
-    std::cout << "Inititializing glew" << std::endl;
+    std::cout << "Initializing glew" << std::endl;
     glewExperimental = GL_TRUE;
     if (glewInit() != GLEW_OK) {
         std::cerr << "Failed to initialize glew\n";
@@ -348,6 +384,16 @@ GLFWwindow* InitializeWindow() {
     while ((error = glGetError()) != GL_NO_ERROR) {
         
     }
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+
+    ImGui_ImplOpenGL3_Init("#version 130");
 
     return window;
 }

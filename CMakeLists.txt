@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD 14)
 include(GNUInstallDirs)
 
 add_executable(terracotta
-	terracotta/assets/AssetCache.cpp
+    terracotta/assets/AssetCache.cpp
     terracotta/assets/AssetCache.h
     terracotta/assets/stb_image.h
     terracotta/assets/TextureArray.cpp
@@ -25,10 +25,25 @@ add_executable(terracotta
     terracotta/block/BlockState.h
     terracotta/Camera.cpp
     terracotta/Camera.h
+    terracotta/ChatWindow.cpp
+    terracotta/ChatWindow.h
     terracotta/Game.cpp
     terracotta/Game.h
     terracotta/GameWindow.cpp
     terracotta/GameWindow.h
+    terracotta/lib/imgui/imconfig.h
+    terracotta/lib/imgui/imgui.cpp
+    terracotta/lib/imgui/imgui.h
+    terracotta/lib/imgui/imgui_draw.cpp
+    terracotta/lib/imgui/imgui_impl_glfw.cpp
+    terracotta/lib/imgui/imgui_impl_glfw.h
+    terracotta/lib/imgui/imgui_impl_opengl3.cpp
+    terracotta/lib/imgui/imgui_impl_opengl3.h
+    terracotta/lib/imgui/imgui_internal.h
+    terracotta/lib/imgui/imgui_widgets.cpp
+    terracotta/lib/imgui/imstb_rectpack.h
+    terracotta/lib/imgui/imstb_textedit.h
+    terracotta/lib/imgui/imstb_truetype.h
     terracotta/main.cpp
     terracotta/math/Plane.cpp
     terracotta/math/Plane.h
@@ -39,13 +54,11 @@ add_executable(terracotta
     terracotta/render/ChunkMesh.h
     terracotta/render/ChunkMeshGenerator.cpp
     terracotta/render/ChunkMeshGenerator.h
-    terracotta/render/Model.cpp
-    terracotta/render/Model.h
     terracotta/render/Shader.cpp
     terracotta/render/Shader.h
 )
 
-add_definitions(-DGLEW_STATIC)
+add_definitions(-DGLEW_STATIC -DIMGUI_IMPL_OPENGL_LOADER_GLEW)
 
 find_package(glfw3 REQUIRED)
 find_package(GLEW REQUIRED)

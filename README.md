@@ -1,6 +1,8 @@
 # Terracotta
 This is a toy Minecraft client that I'm using to learn OpenGL. I have no experience, so this is probably really bad.
 
+![Terracotta Image](https://i.imgur.com/PIcgKa0.png)
+
 ## Running
 This makes use of the Minecraft assets stored in the 1.13.2 jar.  
 Copy the 1.13.2.jar, bin/blocks.json, bin/shaders, and mclib.dll over to the folder with terracotta.exe for it to work correctly.

@@ -68,6 +68,12 @@ void GameWindow::OnMouseMove(double x, double y) {
     }
 }
 
+void GameWindow::OnMouseButton(int button, int action, int mods) {
+    for (auto&& cb : m_MouseButtonCallbacks) {
+        cb(button, action, mods);
+    }
+}
+
 void GameWindow::OnMouseScroll(double offset_x, double offset_y) {
     for (auto&& cb : m_MouseScrollCallbacks) {
         cb(offset_x, offset_y);

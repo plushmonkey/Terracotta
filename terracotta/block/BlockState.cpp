@@ -6,11 +6,13 @@
 namespace terra {
 namespace block {
 
+static const std::string kNullProperty = "";
+
 const std::string& BlockState::GetProperty(const std::string& property) const {
     auto iter = m_Properties.find(property);
 
     if (iter == m_Properties.end()) {
-        return "";
+        return kNullProperty;
     }
 
     return iter->second;
