@@ -95,7 +95,7 @@ glm::vec3 GetVertex(const mc::AABB& aabb, int index) {
     return VecToGLM(v);
 }
 
-bool Frustum::Intersects(mc::AABB aabb) const {
+bool Frustum::Intersects(const mc::AABB& aabb) const {
     for (int i = 0; i < 6; ++i) {
         int out = 0;
         int in = 0;

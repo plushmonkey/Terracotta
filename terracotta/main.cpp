@@ -26,6 +26,8 @@
 #include "lib/imgui/imgui_impl_glfw.h"
 #include "lib/imgui/imgui_impl_opengl3.h"
 
+#include "World.h"
+
 #include <GLFW/glfw3.h>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -135,18 +137,20 @@ int main(int argc, char* argvp[]) {
         return 1;
     }
 
-    terra::render::ChunkMeshGenerator mesh_gen(game.GetNetworkClient().GetWorld());
+    terra::World world(game.GetNetworkClient().GetDispatcher());
+
+    auto mesh_gen = std::make_shared<terra::render::ChunkMeshGenerator>(&world, camera.GetPosition());
 
     terra::ChatWindow chat(game.GetNetworkClient().GetDispatcher(), game.GetNetworkClient().GetConnection());
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
+        game.Update();
+        
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
-        game.Update();
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -160,37 +164,37 @@ int main(int argc, char* argvp[]) {
         glUniformMatrix4fv(proj_uniform, 1, GL_FALSE, glm::value_ptr(camera.GetPerspectiveMatrix()));
 
         auto player_chunk = game.GetNetworkClient().GetWorld()->GetChunk(mc::ToVector3i(game.GetPosition()));
-        if (player_chunk == nullptr) continue;
-        
-        for (auto&& kv : mesh_gen) {
-            terra::render::ChunkMesh* mesh = kv.second.get();
-            mc::Vector3i chunk_base = kv.first;
+        if (player_chunk != nullptr) {
+            for (auto&& kv : *mesh_gen) {
+                terra::render::ChunkMesh* mesh = kv.second.get();
+                mc::Vector3i chunk_base = kv.first;
 
-            mc::Vector3d min = mc::ToVector3d(chunk_base);
-            mc::Vector3d max = mc::ToVector3d(chunk_base) + mc::Vector3d(16, 16, 16);
-            mc::AABB chunk_bounds(min, max);
+                mc::Vector3d min = mc::ToVector3d(chunk_base);
+                mc::Vector3d max = mc::ToVector3d(chunk_base) + mc::Vector3d(16, 16, 16);
+                mc::AABB chunk_bounds(min, max);
 
-            if (!frustum.Intersects(chunk_bounds)) continue;
+                if (!frustum.Intersects(chunk_bounds)) continue;
 
-            mesh->Render(model_uniform);
-        }
+                mesh->Render(model_uniform);
+            }
 
-        glBindVertexArray(block_vao);
+            glBindVertexArray(block_vao);
 
-        auto entity_manager = game.GetNetworkClient().GetEntityManager();
-        for (auto f = entity_manager->begin(); f != entity_manager->end(); ++f) {
-            auto&& entity = f->second;
-            if (entity_manager->GetPlayerEntity() == entity) continue;
-            mc::Vector3d position = entity->GetPosition() + mc::Vector3d(0, 0.5, 0);
+            auto entity_manager = game.GetNetworkClient().GetEntityManager();
+            for (auto f = entity_manager->begin(); f != entity_manager->end(); ++f) {
+                auto&& entity = f->second;
+                if (entity_manager->GetPlayerEntity() == entity) continue;
+                mc::Vector3d position = entity->GetPosition() + mc::Vector3d(0, 0.5, 0);
 
-            glm::mat4 model(1.0);
-            model = glm::translate(model, glm::vec3(position.x, position.y + 0.5, position.z));
-            model = glm::rotate(model, entity->GetYaw(), glm::vec3(0, 1, 0));
-            model = glm::scale(model, glm::vec3(1, 2, 1));
+                glm::mat4 model(1.0);
+                model = glm::translate(model, glm::vec3(position.x, position.y + 0.5, position.z));
+                model = glm::rotate(model, entity->GetYaw(), glm::vec3(0, 1, 0));
+                model = glm::scale(model, glm::vec3(1, 2, 1));
 
-            glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniformMatrix4fv(model_uniform, 1, GL_FALSE, glm::value_ptr(model));
 
-            glDrawArrays(GL_TRIANGLES, 0, 36);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+            }
         }
 
         {
@@ -205,15 +209,20 @@ int main(int argc, char* argvp[]) {
         }
 
         chat.Render();
-
+        
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        ImGui::EndFrame();
 
         glBindVertexArray(0);
 
         glUseProgram(0);
         glfwSwapBuffers(window);
+
+        mesh_gen->ProcessChunks();
     }
+
+    mesh_gen.reset();
 
     return 0;
 }
@@ -374,9 +383,9 @@ GLFWwindow* InitializeWindow() {
     }
 
 #ifdef _DEBUG
-    std::cout << "Setting debug callback" << std::endl;
-    glDebugMessageCallback(OpenGLDebugOutputCallback, nullptr);
-    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+    //std::cout << "Setting debug callback" << std::endl;
+    //glDebugMessageCallback(OpenGLDebugOutputCallback, nullptr);
+    //glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
 #endif
     GLenum error;
 

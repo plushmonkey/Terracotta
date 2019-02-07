@@ -10,4 +10,4 @@ build
 *.sln
 *.vcxproj
 *.vcxproj.user
-
+*.vspx

@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 #include <mclib/util/Utility.h>
 #include <mclib/util/Utility.h>
+#include <iostream>
 
 namespace terra {
 
@@ -36,8 +37,12 @@ void Game::Update() {
     OutputDebugStringA(s.c_str());
 #endif
 
+    if (m_DeltaTime * 1000 > 17) {
+        std::cout << "Slow frame time: " << (m_DeltaTime * 1000) << std::endl;
+    }
+
     auto controller = m_NetworkClient.GetPlayerController();
-    double speed = 4.3;
+    double speed = 4.3 * 1000;
 
     auto pos = controller->GetPosition();
 
@@ -50,7 +55,7 @@ void Game::Update() {
         front.y = 0;
         front = glm::normalize(front);
 
-        target_pos += mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed;
+        target_pos += mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed * m_DeltaTime;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_S)) {
@@ -60,21 +65,21 @@ void Game::Update() {
         front.y = 0;
         front = glm::normalize(front);
 
-        target_pos -= mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed;
+        target_pos -= mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed * m_DeltaTime;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_A)) {
         m_Camera.ProcessMovement(terra::CameraMovement::Left, m_DeltaTime);
         glm::vec3 right = m_Camera.GetRight();
 
-        target_pos -= mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed;
+        target_pos -= mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed * m_DeltaTime;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_D)) {
         m_Camera.ProcessMovement(terra::CameraMovement::Right, m_DeltaTime);
         glm::vec3 right = m_Camera.GetRight();
 
-        target_pos += mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed;
+        target_pos += mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed * m_DeltaTime;
     }
 
     controller->SetMoveSpeed(4.3f);

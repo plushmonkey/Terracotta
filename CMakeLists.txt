@@ -27,6 +27,8 @@ add_executable(terracotta
     terracotta/Camera.h
     terracotta/ChatWindow.cpp
     terracotta/ChatWindow.h
+    terracotta/Chunk.cpp
+    terracotta/Chunk.h
     terracotta/Game.cpp
     terracotta/Game.h
     terracotta/GameWindow.cpp
@@ -50,12 +52,15 @@ add_executable(terracotta
     terracotta/math/TypeUtil.h
     terracotta/math/volumes/Frustum.cpp
     terracotta/math/volumes/Frustum.h
+    terracotta/PriorityQueue.h
     terracotta/render/ChunkMesh.cpp
     terracotta/render/ChunkMesh.h
     terracotta/render/ChunkMeshGenerator.cpp
     terracotta/render/ChunkMeshGenerator.h
     terracotta/render/Shader.cpp
     terracotta/render/Shader.h
+    terracotta/World.cpp
+    terracotta/World.h
 )
 
 add_definitions(-DGLEW_STATIC -DIMGUI_IMPL_OPENGL_LOADER_GLEW)

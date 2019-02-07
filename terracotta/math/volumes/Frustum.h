@@ -13,7 +13,7 @@ class Frustum {
 public:
     Frustum(glm::vec3 position, glm::vec3 forward, float near, float far, float fov, float ratio, glm::vec3 up, glm::vec3 right);
 
-    bool Intersects(mc::AABB aabb) const;
+    bool Intersects(const mc::AABB& aabb) const;
     bool Intersects(glm::vec3 v) const;
     bool Intersects(mc::Vector3i v) const;
     bool Intersects(mc::Vector3d v) const;
