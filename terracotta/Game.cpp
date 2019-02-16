@@ -49,7 +49,6 @@ void Game::Update() {
     mc::Vector3d target_pos = pos;
 
     if (m_Window.IsKeyDown(GLFW_KEY_W)) {
-        m_Camera.ProcessMovement(terra::CameraMovement::Forward, m_DeltaTime);
         glm::vec3 front = m_Camera.GetFront();
 
         front.y = 0;
@@ -59,7 +58,6 @@ void Game::Update() {
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_S)) {
-        m_Camera.ProcessMovement(terra::CameraMovement::Backward, m_DeltaTime);
         glm::vec3 front = m_Camera.GetFront();
 
         front.y = 0;
@@ -69,14 +67,13 @@ void Game::Update() {
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_A)) {
-        m_Camera.ProcessMovement(terra::CameraMovement::Left, m_DeltaTime);
         glm::vec3 right = m_Camera.GetRight();
 
         target_pos -= mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed * m_DeltaTime;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_D)) {
-        m_Camera.ProcessMovement(terra::CameraMovement::Right, m_DeltaTime);
+
         glm::vec3 right = m_Camera.GetRight();
 
         target_pos += mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed * m_DeltaTime;

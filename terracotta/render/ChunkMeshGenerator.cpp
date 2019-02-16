@@ -432,6 +432,8 @@ void ChunkMeshGenerator::GenerateMesh(s64 chunk_x, s64 chunk_y, s64 chunk_z) {
 }
 
 void ChunkMeshGenerator::OnChunkUnload(terra::ChunkColumnPtr chunk) {
+    if (chunk == nullptr) return;
+
     for (int y = 0; y < 16; ++y) {
         DestroyChunk(chunk->GetMetadata().x, y, chunk->GetMetadata().z);
     }

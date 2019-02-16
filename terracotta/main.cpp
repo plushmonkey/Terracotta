@@ -121,7 +121,7 @@ int main(int argc, char* argvp[]) {
     float aspect_ratio = width / (float)height;
     float fov = glm::radians(80.0f);
 
-    float view_distance = 264.0f;
+    float view_distance = 16.0f * 16.0f;
 
     terra::Camera camera(glm::vec3(0.0f, 0.0f, 9.0f), fov, aspect_ratio, 0.1f, view_distance);
     terra::Game game(*g_GameWindow, camera);
@@ -325,11 +325,19 @@ void APIENTRY OpenGLDebugOutputCallback(GLenum source, GLenum type, GLuint id, G
 GLFWwindow* InitializeWindow() {
     glfwInit();
 
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, false);
-    glfwWindowHint(GLFW_SAMPLES, 4);
+    glfwWindowHint(GLFW_RED_BITS, mode->redBits);
+    glfwWindowHint(GLFW_GREEN_BITS, mode->greenBits);
+    glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
+    glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
+    glfwWindowHint(GLFW_SAMPLES, 8);
 
     GLFWwindow* window = glfwCreateWindow(960, 540, "Terracotta", nullptr, nullptr);
     if (window == nullptr) {
