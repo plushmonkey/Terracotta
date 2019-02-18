@@ -1,6 +1,7 @@
 Debug
 Release
 build
+buildx64
 *.opensdf
 *.sdf
 *.suo

@@ -13,9 +13,15 @@ uniform vec3 tint;
 out vec4 color;
 
 void main() {
-	vec3 diffuseSample = texture(texarray, vec3(TexCoord, texIndex)).xyz;
+	vec4 sample = texture(texarray, vec3(TexCoord, texIndex));
+	
+	if (sample.a <= 0.6) {
+		discard;
+	}
+	
+	vec3 diffuseSample = sample.xyz;
 	
 	diffuseSample = diffuseSample * varyingTint;
 	
-	color = vec4(diffuseSample, 1.0f);
+	color = vec4(diffuseSample, 1.0);
 }

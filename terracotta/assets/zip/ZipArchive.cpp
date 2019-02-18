@@ -35,6 +35,10 @@ char* ZipArchive::ReadFile(const char* filename, size_t* size) {
     return static_cast<char*>(p);
 }
 
+void ZipArchive::FreeFileData(char* data) {
+    mz_free(data);
+}
+
 // Lists all of the files in the archive that contain search in their name.
 std::vector<std::string> ZipArchive::ListFiles(const char* search) {
     std::vector<std::string> results;

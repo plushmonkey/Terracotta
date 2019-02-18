@@ -5,17 +5,21 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <cstdint>
 
 namespace terra {
 namespace assets {
+
+using TextureHandle = uint32_t;
 
 class TextureArray {
 public:
     TextureArray();
 
-    std::size_t Append(const std::string& filename, const std::string& texture);
+    TextureHandle Append(const std::string& filename, const std::string& texture);
 
-    unsigned int GetIndex(const std::string& filename);
+    bool GetTexture(const std::string& filename, TextureHandle* handle);
+    bool IsTransparent(TextureHandle handle);
 
     void Generate();
     void Bind();
@@ -23,7 +27,8 @@ private:
     unsigned int m_TextureId;
 
     std::vector<unsigned char> m_TextureData;
-    std::unordered_map<std::string, unsigned int> m_Filenames;
+    std::unordered_map<std::string, TextureHandle> m_Textures;
+    std::unordered_map<TextureHandle, bool> m_Transparency;
 };
 
 } // ns assets

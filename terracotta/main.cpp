@@ -22,6 +22,7 @@
 #include "render/ChunkMesh.h"
 #include "render/ChunkMeshGenerator.h"
 #include "assets/AssetCache.h"
+#include "assets/AssetLoader.h"
 #include "lib/imgui/imgui.h"
 #include "lib/imgui/imgui_impl_glfw.h"
 #include "lib/imgui/imgui_impl_opengl3.h"
@@ -37,7 +38,6 @@ GLuint CreateBlockVAO();
 GLFWwindow* InitializeWindow();
 
 std::unique_ptr<terra::GameWindow> g_GameWindow;
-
 std::unique_ptr<terra::assets::AssetCache> g_AssetCache;
 
 int main(int argc, char* argvp[]) {
@@ -84,8 +84,10 @@ int main(int argc, char* argvp[]) {
 
     g_AssetCache = std::make_unique<terra::assets::AssetCache>();
 
-    if (!g_AssetCache->Initialize("1.13.2.jar", "blocks.json")) {
-        std::cerr << "Failed to initialize asset cache." << std::endl;
+    terra::assets::AssetLoader asset_loader(*g_AssetCache);
+
+    if (!asset_loader.LoadArchive("1.13.2.jar", "blocks.json")) {
+        std::cerr << "Failed to load assets." << std::endl;
         return 1;
     }
 

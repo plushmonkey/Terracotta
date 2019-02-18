@@ -11,6 +11,8 @@ include(GNUInstallDirs)
 add_executable(terracotta
     terracotta/assets/AssetCache.cpp
     terracotta/assets/AssetCache.h
+    terracotta/assets/AssetLoader.cpp
+    terracotta/assets/AssetLoader.h
     terracotta/assets/stb_image.h
     terracotta/assets/TextureArray.cpp
     terracotta/assets/TextureArray.h
@@ -18,6 +20,8 @@ add_executable(terracotta
     terracotta/assets/zip/miniz.h
     terracotta/assets/zip/ZipArchive.cpp
     terracotta/assets/zip/ZipArchive.h
+    terracotta/block/BlockElement.h
+    terracotta/block/BlockFace.cpp
     terracotta/block/BlockFace.h
     terracotta/block/BlockModel.cpp
     terracotta/block/BlockModel.h

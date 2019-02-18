@@ -16,22 +16,26 @@ class ZipArchive;
 
 class AssetCache {
 public:
-    // Initialize an asset cache with the minecraft jar and blocks json.
-    bool Initialize(const std::string& archive_path, const std::string& blocks_path);
+    AssetCache() { }
+
+    ~AssetCache() { }
+    block::BlockState* GetBlockState(u32 block_id) const;
+    void AddBlockState(std::unique_ptr<terra::block::BlockState> state);
+    void SetMaxBlockId(u32 id) { m_BlockStates.resize(id + 1); }
 
     TextureArray& GetTextures() { return m_TextureArray; }
-    terra::block::BlockState* GetBlockState(u32 block_id) const;
-    terra::block::BlockModel* GetBlockModel(const std::string& model_path) const;
-    terra::block::BlockModel* GetVariantModel(const std::string& block_name, const std::string& variant);
+    TextureHandle AddTexture(const std::string& path, const std::string& data);
+
+    block::BlockModel* GetVariantModel(const std::string& block_name, const std::string& variant);
+    void AddVariantModel(const std::string& block_name, const std::string& variant, block::BlockModel* model);
+
+    std::vector<block::BlockModel*> GetBlockModels(const std::string& find);
+    block::BlockModel* GetBlockModel(const std::string& path);
+    void AddBlockModel(const std::string& path, std::unique_ptr<block::BlockModel> model);
 
 private:
-    bool LoadBlockStates(const std::string& filename);
-    bool LoadTextures(terra::assets::ZipArchive& archive);
-    std::size_t LoadBlockModels(terra::assets::ZipArchive& archive);
-    void LoadBlockVariants(terra::assets::ZipArchive& archive);
-
     // Maps block id to the BlockState
-    std::unordered_map<u32, std::unique_ptr<terra::block::BlockState>> m_BlockStates;
+    std::vector<std::unique_ptr<terra::block::BlockState>> m_BlockStates;
     // Maps model path to a BlockModel
     std::unordered_map<std::string, std::unique_ptr<terra::block::BlockModel>> m_BlockModels;
     // Block name -> (Variant String -> BlockModel)

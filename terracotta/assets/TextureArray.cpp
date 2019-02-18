@@ -11,18 +11,28 @@ TextureArray::TextureArray() {
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_TextureId);
 }
 
-std::size_t TextureArray::Append(const std::string& filename, const std::string& texture) {
-    auto iter = m_Filenames.find(filename);
+TextureHandle TextureArray::Append(const std::string& filename, const std::string& texture) {
+    auto iter = m_Textures.find(filename);
 
-    if (iter != m_Filenames.end()) {
+    if (iter != m_Textures.end()) {
         return iter->second;
     }
 
-    unsigned int index = m_Filenames.size();
-    m_Filenames[filename] = index;
+    TextureHandle handle = m_Textures.size();
+    
+    m_Textures[filename] = handle;
     m_TextureData.insert(m_TextureData.end(), texture.c_str(), texture.c_str() + texture.size());
 
-    return m_Filenames.size();
+    for (std::size_t i = 4; i < texture.size(); i += 4) {
+        char alpha = texture[i];
+
+        if (texture[i] == 0) {
+            m_Transparency[handle] = true;
+            break;
+        }
+    }
+
+    return handle;
 }
 
 void TextureArray::Generate() {
@@ -37,8 +47,8 @@ void TextureArray::Generate() {
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BASE_LEVEL, 0);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, 4);
 
-    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_RGBA8, 16, 16, m_Filenames.size());
-    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, 16, 16, m_Filenames.size(), GL_RGBA, GL_UNSIGNED_BYTE, &m_TextureData[0]);
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_RGBA8, 16, 16, m_Textures.size());
+    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, 16, 16, m_Textures.size(), GL_RGBA, GL_UNSIGNED_BYTE, &m_TextureData[0]);
 
     glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 
@@ -50,8 +60,25 @@ void TextureArray::Bind() {
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_TextureId);
 }
 
-unsigned int TextureArray::GetIndex(const std::string& filename) {
-    return m_Filenames[filename];
+bool TextureArray::GetTexture(const std::string& filename, TextureHandle* handle) {
+    auto iter = m_Textures.find(filename);
+
+    if (iter == m_Textures.end()) {
+        return false;
+    }
+
+    *handle = iter->second;
+    return true;
+}
+
+bool TextureArray::IsTransparent(TextureHandle handle) {
+    auto iter = m_Transparency.find(handle);
+
+    if (iter == m_Transparency.end()) {
+        return false;
+    }
+
+    return iter->second;
 }
 
 } // ns assets

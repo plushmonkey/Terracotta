@@ -18,6 +18,7 @@ public:
 
     // Reads a file from the archive into the heap.
     char* ReadFile(const char* filename, size_t* size);
+    void FreeFileData(char* data);
 
     // Lists all of the files in the archive that contain search in their name.
     std::vector<std::string> ListFiles(const char* search);

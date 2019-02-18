@@ -206,6 +206,35 @@ int ChunkMeshGenerator::GetAmbientOcclusion(ChunkMeshBuildContext& context, AOCa
     return 3 - (value1 + value2 + value_corner);
 }
 
+bool ChunkMeshGenerator::IsOccluding(terra::block::BlockModel* from, terra::block::BlockFace face, mc::block::BlockPtr test_block) {
+    for (auto& element : from->GetElements()) {
+        if (element.GetFace(face).cull_face == block::BlockFace::None) {
+            return false;
+        }
+    }
+
+    terra::block::BlockState* state = g_AssetCache->GetBlockState(test_block->GetType());
+    if (state == nullptr) return false;
+
+    terra::block::BlockModel* model = g_AssetCache->GetVariantModel(test_block->GetName(), state->GetVariant());
+    if (model == nullptr) return false;
+
+    bool is_full = false;
+
+    block::BlockFace opposite = block::get_opposite_face(face);
+    for (auto& element : model->GetElements()) {
+        if (element.GetFrom() == glm::vec3(0, 0, 0) && element.GetTo() == glm::vec3(1, 1, 1)) {
+            is_full = true;
+        }
+
+        if (g_AssetCache->GetTextures().IsTransparent(element.GetFace(opposite).texture)) {
+            return false;
+        }
+    }
+    
+    return is_full;
+}
+
 void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
     std::unique_ptr<std::vector<Vertex>> vertices = std::make_unique<std::vector<Vertex>>();
 
@@ -218,187 +247,304 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 mc::Vector3i mc_pos = context.world_position + mc::Vector3i(x, y, z);
                 mc::block::BlockPtr block = context.GetBlock(mc_pos);
                 
-                // TODO: Remove once water is implemented properly.
-                if (block == nullptr || (!block->IsSolid() && block->GetName() != "minecraft:water")) continue;
-
                 terra::block::BlockState* state = g_AssetCache->GetBlockState(block->GetType());
                 if (state == nullptr) continue;
 
                 terra::block::BlockModel* model = g_AssetCache->GetVariantModel(block->GetName(), state->GetVariant());
                 if (model == nullptr) continue;
 
-                glm::vec3 tint(1.0f, 1.0f, 1.0f);
-                glm::vec3 side_tint(1.0f, 1.0f, 1.0f);
-
-                // TODO: Remove once water is implemented properly.
-                bool is_water = block->GetName() == "minecraft:water";
-
-                // Temporary until tint related data is parsed from model elements.
-                if (block->GetName().find("grass_block") != std::string::npos || block->GetName().find("leaves") != std::string::npos) {
-                    double r = 137 / 255.0;
-                    double g = 191 / 255.0;
-                    double b = 98 / 255.0;
-
-                    tint = glm::vec3(r, g, b);
-
-                    if (block->GetName().find("grass_block") == std::string::npos) {
-                        side_tint = tint;
-                    }
-                } else if (is_water) {
-                    tint = glm::vec3(0.1, 0.4, 0.8);
-                    side_tint = glm::vec3(0.1, 0.4, 0.8);
-                }
+                static const glm::vec3 grass_tint(137 / 255.0, 191 / 255.0, 98 / 255.0);
 
                 const glm::vec3 base = terra::math::VecToGLM(mc_pos);
 
                 mc::block::BlockPtr above = context.GetBlock(mc_pos + mc::Vector3i(0, 1, 0));
-                if (above == nullptr || !above->IsSolid()) {
+                if (!IsOccluding(model, block::BlockFace::Up, above)) {
+               // if (above == nullptr || !above->IsSolid()) {
                     // Render the top face of the current block.
-                    glm::vec3 bottom_left = base + glm::vec3(0, 1, 0);
-                    glm::vec3 bottom_right = base + glm::vec3(0, 1, 1);
-                    glm::vec3 top_left = base + glm::vec3(1, 1, 0);
-                    glm::vec3 top_right = base + glm::vec3(1, 1, 1);
-
                     int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 1, -1));
                     int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 1, 1));
                     int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 1, -1));
                     int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 1, 1));
 
-                    auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::Top);
-                    u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
+                    for (const auto& element : model->GetElements()) {
+                        block::RenderableFace renderable = element.GetFace(block::BlockFace::Up);
+                        assets::TextureHandle texture = renderable.texture;
 
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
-                    vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint, obr);
-                    vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
+                        const auto& from = element.GetFrom();
+                        const auto& to = element.GetTo();
 
-                    vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
-                    vertices->emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint, otl);
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
+                        glm::vec3 bottom_left = base + glm::vec3(from.x, to.y, from.z);
+                        glm::vec3 bottom_right = bottom_left + glm::vec3(0, 0, to.z);
+                        glm::vec3 top_left = bottom_left + glm::vec3(to.x, 0, 0);
+                        glm::vec3 top_right = bottom_left + glm::vec3(to.x, 0, to.z - from.z);
+
+                        glm::vec3 tint(1.0f, 1.0f, 1.0f);
+
+                        if (renderable.tint_index != -1) {
+                            tint = grass_tint;
+                        }
+
+                        vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
+                        vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint, obr);
+                        vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
+
+                        vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
+                        vertices->emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint, otl);
+                        vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
+
+                        if (renderable.cull_face != block::BlockFace::Up) {
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
+                            vertices->emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint, otl);
+                            vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint, obr);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
+                        }
+                    }
                 }
 
                 mc::block::BlockPtr below = context.GetBlock(mc_pos - mc::Vector3i(0, 1, 0));
-                if (below == nullptr || !below->IsSolid()) {
+                if (!IsOccluding(model, block::BlockFace::Down, below)) {
                     // Render the bottom face of the current block.
-                    glm::vec3 bottom_left = base + glm::vec3(1, 0, 0);
-                    glm::vec3 bottom_right = base + glm::vec3(1, 0, 1);
-                    glm::vec3 top_left = base + glm::vec3(0, 0, 0);
-                    glm::vec3 top_right = base + glm::vec3(0, 0, 1);
-
                     int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
                     int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
                     int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, -1, -1));
                     int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
 
-                    auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::Bottom);
-                    u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
+                    for (const auto& element : model->GetElements()) {
+                        block::RenderableFace renderable = element.GetFace(block::BlockFace::Down);
+                        assets::TextureHandle texture = renderable.texture;
 
-                    vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, side_tint, obl);
-                    vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, side_tint, obr);
-                    vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, side_tint, otr);
+                        const auto& from = element.GetFrom();
+                        const auto& to = element.GetTo();
 
-                    vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, side_tint, otr);
-                    vertices->emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, side_tint, otl);
-                    vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, side_tint, obl);
+                        glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, from.z);
+                        glm::vec3 bottom_right = bottom_left + glm::vec3(0, 0, to.z);
+                        glm::vec3 top_left = bottom_left + glm::vec3(-to.x, 0, 0);
+                        glm::vec3 top_right = bottom_left + glm::vec3(-to.x, 0, to.z);
+
+                        glm::vec3 tint(1.0f, 1.0f, 1.0f);
+
+                        if (renderable.tint_index != -1) {
+                            tint = grass_tint;
+                        }
+
+                        vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
+                        vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, tint, obr);
+                        vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
+
+                        vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
+                        vertices->emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, tint, otl);
+                        vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
+
+                        if (renderable.cull_face != block::BlockFace::Down) {
+                            vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
+                            vertices->emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, tint, otl);
+                            vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, tint, obr);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
+                        }
+                    }
                 }
 
                 mc::block::BlockPtr north = context.GetBlock(mc_pos + mc::Vector3i(0, 0, -1));
-                if (north == nullptr || !north->IsSolid()) {
+                if (!IsOccluding(model, block::BlockFace::North, north)) {
                     // Render the north face of the current block.
-                    glm::vec3 bottom_left = base + glm::vec3(1, 0, 0);
-                    glm::vec3 bottom_right = base + glm::vec3(0, 0, 0);
-                    glm::vec3 top_left = base + glm::vec3(1, 1, 0);
-                    glm::vec3 top_right = base + glm::vec3(0, 1, 0);
-
                     int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
                     int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
                     int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
                     int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
 
-                    auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::North);
-                    u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
+                    for (const auto& element : model->GetElements()) {
+                        block::RenderableFace renderable = element.GetFace(block::BlockFace::North);
 
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
-                    vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint, obr);
-                    vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
+                        if (renderable.face == block::BlockFace::North) {
+                            assets::TextureHandle texture = renderable.texture;
 
-                    vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
-                    vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint, otl);
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
+                            const auto& from = element.GetFrom();
+                            const auto& to = element.GetTo();
+
+                            glm::vec3 bottom_left = base + glm::vec3(1 - from.x, from.y, from.z);
+                            glm::vec3 bottom_right = bottom_left + glm::vec3(-to.x, 0, 0);
+                            glm::vec3 top_left = bottom_left + glm::vec3(0, to.y, 0);
+                            glm::vec3 top_right = bottom_left + glm::vec3(-to.x, to.y, 0);
+
+                            glm::vec3 tint(1.0f, 1.0f, 1.0f);
+
+                            if (renderable.tint_index != -1) {
+                                tint = grass_tint;
+                            }
+
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+
+                            if (renderable.cull_face != block::BlockFace::North) {
+                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                                vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
+                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+
+                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                                vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
+                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+
+                            }
+                        }
+                    }
                 }
 
                 mc::block::BlockPtr south = context.GetBlock(mc_pos + mc::Vector3i(0, 0, 1));
-                if (south == nullptr || !south->IsSolid()) {
+                if (!IsOccluding(model, block::BlockFace::South, south)) {
                     // Render the south face of the current block.
-                    glm::vec3 bottom_left = base + glm::vec3(0, 0, 1);
-                    glm::vec3 bottom_right = base + glm::vec3(1, 0, 1);
-                    glm::vec3 top_left = base + glm::vec3(0, 1, 1);
-                    glm::vec3 top_right = base + glm::vec3(1, 1, 1);
-
                     int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
                     int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
                     int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
                     int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
 
-                    auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::South);
-                    u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
+                    for (const auto& element : model->GetElements()) {
+                        block::RenderableFace renderable = element.GetFace(block::BlockFace::South);
 
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, side_tint, obl);
-                    vertices->emplace_back(bottom_right, glm::vec3(0, 0, 1), glm::vec2(1, 0), texture, side_tint, obr);
-                    vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, side_tint, otr);
+                        if (renderable.face == block::BlockFace::South) {
+                            assets::TextureHandle texture = renderable.texture;
 
-                    vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, side_tint, otr);
-                    vertices->emplace_back(top_left, glm::vec3(0, 0, 1), glm::vec2(0, 1), texture, side_tint, otl);
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, side_tint, obl);
+                            const auto& from = element.GetFrom();
+                            const auto& to = element.GetTo();
+
+                            glm::vec3 bottom_left = base + glm::vec3(from.x, from.y, 1 + from.z);
+                            glm::vec3 bottom_right = bottom_left + glm::vec3(to.x, 0, 0);
+                            glm::vec3 top_left = bottom_left + glm::vec3(0, to.y, 0);
+                            glm::vec3 top_right = bottom_left + glm::vec3(to.x, to.y, 0);
+
+                            glm::vec3 tint(1.0f, 1.0f, 1.0f);
+
+                            if (renderable.tint_index != -1) {
+                                tint = grass_tint;
+                            }
+
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, 1), glm::vec2(1, 0), texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 0, 1), glm::vec2(0, 1), texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
+
+                            if (renderable.cull_face != block::BlockFace::South) {
+                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
+                                vertices->emplace_back(top_left, glm::vec3(0, 0, 1), glm::vec2(0, 1), texture, tint, otl);
+                                vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
+
+                                vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
+                                vertices->emplace_back(bottom_right, glm::vec3(0, 0, 1), glm::vec2(1, 0), texture, tint, obr);
+                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
+                            }
+                        }
+                    }
                 }
 
                 mc::block::BlockPtr east = context.GetBlock(mc_pos + mc::Vector3i(1, 0, 0));
-                if (east == nullptr || !east->IsSolid()) {
+                if (!IsOccluding(model, block::BlockFace::East, east)) {
                     // Render the east face of the current block.
-                    glm::vec3 bottom_left = base + glm::vec3(1, 0, 1);
-                    glm::vec3 bottom_right = base + glm::vec3(1, 0, 0);
-                    glm::vec3 top_left = base + glm::vec3(1, 1, 1);
-                    glm::vec3 top_right = base + glm::vec3(1, 1, 0);
-
                     int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, -1, 1));
                     int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, -1, -1));
                     int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
                     int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
 
-                    auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::East);
-                    u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
+                    for (const auto& element : model->GetElements()) {
+                        block::RenderableFace renderable = element.GetFace(block::BlockFace::East);
 
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
-                    vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint, obr);
-                    vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
+                        if (renderable.face == block::BlockFace::East) {
+                            assets::TextureHandle texture = renderable.texture;
 
-                    vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
-                    vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint, otl);
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
+                            const auto& from = element.GetFrom();
+                            const auto& to = element.GetTo();
+
+                            glm::vec3 bottom_left = base + glm::vec3(1 + from.x, from.y, 1 + from.z);
+                            glm::vec3 bottom_right = bottom_left + glm::vec3(0, 0, -to.z);
+                            glm::vec3 top_left = bottom_left + glm::vec3(0, to.y, 0);
+                            glm::vec3 top_right = bottom_left + glm::vec3(0, to.y, -to.z);
+
+                            glm::vec3 tint(1.0f, 1.0f, 1.0f);
+
+                            if (renderable.tint_index != -1) {
+                                tint = grass_tint;
+                            }
+
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+
+                            if (renderable.cull_face != block::BlockFace::East) {
+                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                                vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
+                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+
+                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                                vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
+                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                            }
+                        }
+                    }
                 }
 
                 mc::block::BlockPtr west = context.GetBlock(mc_pos + mc::Vector3i(-1, 0, 0));
-                if (west == nullptr || !west->IsSolid()) {
+                if (!IsOccluding(model, block::BlockFace::West, west)) {
                     // Render the west face of the current block.
-                    glm::vec3 bottom_left = base + glm::vec3(0, 0, 0);
-                    glm::vec3 bottom_right = base + glm::vec3(0, 0, 1);
-                    glm::vec3 top_left = base + glm::vec3(0, 1, 0);
-                    glm::vec3 top_right = base + glm::vec3(0, 1, 1);
-
                     int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
                     int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, -1, 1));
                     int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
                     int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
 
-                    auto&& texture_path = model->GetTexturePath(terra::block::BlockFace::West);
-                    u32 texture = g_AssetCache->GetTextures().GetIndex(texture_path);
+                    for (const auto& element : model->GetElements()) {
+                        block::RenderableFace renderable = element.GetFace(block::BlockFace::West);
 
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
-                    vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, side_tint, obr);
-                    vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
+                        if (renderable.face == block::BlockFace::West) {
+                            assets::TextureHandle texture = renderable.texture;
 
-                    vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, side_tint, otr);
-                    vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, side_tint, otl);
-                    vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, side_tint, obl);
+                            const auto& from = element.GetFrom();
+                            const auto& to = element.GetTo();
+
+                            glm::vec3 bottom_left = base + glm::vec3(from.x, from.y, from.z);
+                            glm::vec3 bottom_right = base + glm::vec3(from.x, from.y, to.z);
+                            glm::vec3 top_left = base + glm::vec3(from.x, to.y, from.z);
+                            glm::vec3 top_right = base + glm::vec3(from.x, to.y, to.z);
+
+                            glm::vec3 tint(1.0f, 1.0f, 1.0f);
+
+                            if (renderable.tint_index != -1) {
+                                tint = grass_tint;
+                            }
+
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+
+                            if (renderable.cull_face != block::BlockFace::East) {
+                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                                vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
+                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+
+                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                                vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
+                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                            }
+                        }
+                    }
                 }
             }
         }
