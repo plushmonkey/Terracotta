@@ -60,6 +60,7 @@ void ChatWindow::Render() {
 void ChatWindow::HandlePacket(mc::protocol::packets::in::ChatPacket* packet) {
     auto&& data = packet->GetChatData();
     std::string str = mc::util::ParseChatNode(data);
+    str = mc::util::StripChatMessage(str);
 
     m_ChatBuffer.push_back(str);
 
