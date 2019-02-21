@@ -36,7 +36,7 @@ void GameWindow::OnKeyChange(int key, int code, int action, int mode) {
         glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     }
 
-    if (action == GLFW_PRESS) {
+    if (action == GLFW_PRESS && m_UpdateMouse) {
         m_Keys[key] = true;
     } else if (action == GLFW_RELEASE) {
         m_Keys[key] = false;

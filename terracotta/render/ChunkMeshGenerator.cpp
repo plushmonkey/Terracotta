@@ -79,7 +79,7 @@ void ChunkMeshGenerator::WorkerUpdate() {
 }
 
 void ChunkMeshGenerator::ProcessChunks() {
-    const std::size_t kMaxMeshesPerFrame = 4;
+    const std::size_t kMaxMeshesPerFrame = 32;
 
     // Push any new chunks that were added this frame into the work queue
     for (std::size_t i = 0; i < kMaxMeshesPerFrame && !m_ChunkPushQueue.empty(); ++i) {
@@ -174,30 +174,12 @@ void ChunkMeshGenerator::ProcessChunks() {
     }
 }
 
-int ChunkMeshGenerator::GetAmbientOcclusion(ChunkMeshBuildContext& context, AOCache& cache, const mc::Vector3i& side1, const mc::Vector3i& side2, const mc::Vector3i& corner) {
-    auto iter1 = cache.find(side1);
-    auto iter2 = cache.find(side2);
-    auto iter_corner = cache.find(corner);
-
+int ChunkMeshGenerator::GetAmbientOcclusion(ChunkMeshBuildContext& context, const mc::Vector3i& side1, const mc::Vector3i& side2, const mc::Vector3i& corner) {
     int value1, value2, value_corner;
 
-    if (iter1 != cache.end()) {
-        value1 = iter1->second;
-    } else {
-        value1 = context.GetBlock(side1)->IsSolid();
-    }
-
-    if (iter2 != cache.end()) {
-        value2 = iter2->second;
-    } else {
-        value2 = context.GetBlock(side2)->IsSolid();
-    }
-
-    if (iter_corner != cache.end()) {
-        value_corner = iter_corner->second;
-    } else {
-        value_corner = context.GetBlock(corner)->IsSolid();
-    }
+    value1 = context.GetBlock(side1)->IsSolid();
+    value2 = context.GetBlock(side2)->IsSolid();
+    value_corner = context.GetBlock(corner)->IsSolid();
 
     if (value1 && value2) {
         return 0;
@@ -213,10 +195,7 @@ bool ChunkMeshGenerator::IsOccluding(terra::block::BlockModel* from, terra::bloc
         }
     }
 
-    terra::block::BlockState* state = g_AssetCache->GetBlockState(test_block->GetType());
-    if (state == nullptr) return false;
-
-    terra::block::BlockModel* model = g_AssetCache->GetVariantModel(test_block->GetName(), state->GetVariant());
+    terra::block::BlockModel* model = g_AssetCache->GetVariant(test_block);
     if (model == nullptr) return false;
 
     bool is_full = false;
@@ -238,8 +217,6 @@ bool ChunkMeshGenerator::IsOccluding(terra::block::BlockModel* from, terra::bloc
 void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
     std::unique_ptr<std::vector<Vertex>> vertices = std::make_unique<std::vector<Vertex>>();
 
-    AOCache cache;
-
     // Sweep through the blocks and generate vertices for the mesh
     for (int y = 0; y < 16; ++y) {
         for (int z = 0; z < 16; ++z) {
@@ -247,10 +224,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 mc::Vector3i mc_pos = context.world_position + mc::Vector3i(x, y, z);
                 mc::block::BlockPtr block = context.GetBlock(mc_pos);
                 
-                terra::block::BlockState* state = g_AssetCache->GetBlockState(block->GetType());
-                if (state == nullptr) continue;
-
-                terra::block::BlockModel* model = g_AssetCache->GetVariantModel(block->GetName(), state->GetVariant());
+                terra::block::BlockModel* model = g_AssetCache->GetVariant(block);
                 if (model == nullptr) continue;
 
                 static const glm::vec3 grass_tint(137 / 255.0, 191 / 255.0, 98 / 255.0);
@@ -261,10 +235,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 if (!IsOccluding(model, block::BlockFace::Up, above)) {
                // if (above == nullptr || !above->IsSolid()) {
                     // Render the top face of the current block.
-                    int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 1, -1));
-                    int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 1, 1));
-                    int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 1, -1));
-                    int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 1, 1));
+                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 1, -1));
+                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 1, 1));
+                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 1, -1));
+                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 1, 1));
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::Up);
@@ -307,10 +281,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 mc::block::BlockPtr below = context.GetBlock(mc_pos - mc::Vector3i(0, 1, 0));
                 if (!IsOccluding(model, block::BlockFace::Down, below)) {
                     // Render the bottom face of the current block.
-                    int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
-                    int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
-                    int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, -1, -1));
-                    int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
+                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
+                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
+                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, -1, -1));
+                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::Down);
@@ -353,10 +327,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 mc::block::BlockPtr north = context.GetBlock(mc_pos + mc::Vector3i(0, 0, -1));
                 if (!IsOccluding(model, block::BlockFace::North, north)) {
                     // Render the north face of the current block.
-                    int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
-                    int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
-                    int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
-                    int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
+                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
+                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
+                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
+                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::North);
@@ -403,10 +377,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 mc::block::BlockPtr south = context.GetBlock(mc_pos + mc::Vector3i(0, 0, 1));
                 if (!IsOccluding(model, block::BlockFace::South, south)) {
                     // Render the south face of the current block.
-                    int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
-                    int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
-                    int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
-                    int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
+                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
+                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
+                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
+                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::South);
@@ -452,10 +426,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 mc::block::BlockPtr east = context.GetBlock(mc_pos + mc::Vector3i(1, 0, 0));
                 if (!IsOccluding(model, block::BlockFace::East, east)) {
                     // Render the east face of the current block.
-                    int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, -1, 1));
-                    int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, -1, -1));
-                    int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
-                    int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
+                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, -1, 1));
+                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, -1, -1));
+                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
+                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::East);
@@ -501,10 +475,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 mc::block::BlockPtr west = context.GetBlock(mc_pos + mc::Vector3i(-1, 0, 0));
                 if (!IsOccluding(model, block::BlockFace::West, west)) {
                     // Render the west face of the current block.
-                    int obl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
-                    int obr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, -1, 1));
-                    int otl = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
-                    int otr = GetAmbientOcclusion(context, cache, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
+                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
+                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, -1, 1));
+                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
+                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::West);

@@ -9,7 +9,7 @@ namespace render {
 
 class ChunkMesh {
 public:
-    ChunkMesh(unsigned int vao, unsigned int vbo, std::size_t vertex_count);
+    ChunkMesh(unsigned int vao, unsigned int vbo, GLsizei vertex_count);
     ChunkMesh(const ChunkMesh& other);
     ChunkMesh& operator=(const ChunkMesh& other);
 
@@ -19,7 +19,7 @@ public:
 private:
     unsigned int m_VAO;
     unsigned int m_VBO;
-    std::size_t m_VertexCount;
+    GLsizei m_VertexCount;
 };
 
 } // ns render

@@ -5,11 +5,19 @@
 #include <mclib/block/Block.h>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 
 #include "stb_image.h"
 
 namespace terra {
 namespace assets {
+
+void AssetCache::SetMaxBlockId(std::size_t id) {
+    m_BlockStates.resize(id + 1);
+    m_VariantCache.resize(id + 1);
+
+    std::fill(m_VariantCache.begin(), m_VariantCache.end(), nullptr);
+}
 
 terra::block::BlockState* AssetCache::GetBlockState(u32 block_id) const {
     if (block_id >= m_BlockStates.size()) return nullptr;
@@ -64,7 +72,19 @@ terra::block::BlockModel* AssetCache::GetVariantModel(const std::string& block_n
 }
 
 void AssetCache::AddVariantModel(const std::string& block_name, const std::string& variant, block::BlockModel* model) {
-    m_BlockVariants[block_name][variant] = model;
+    m_BlockVariants[block_name].push_back(std::make_pair<>(variant, model));
+}
+
+block::BlockModel* AssetCache::GetVariant(mc::block::BlockPtr block) {
+    block::BlockModel* model = m_VariantCache[block->GetType()];
+
+    if (model == nullptr) {
+        model = GetVariantModel(block->GetName(), GetBlockState(block->GetType())->GetVariant());
+
+        m_VariantCache[block->GetType()] = model;
+    }
+
+    return model;
 }
 
 } // ns assets

@@ -9,7 +9,7 @@
 namespace terra {
 namespace render {
 
-ChunkMesh::ChunkMesh(unsigned int vao, unsigned int vbo, std::size_t vertex_count) 
+ChunkMesh::ChunkMesh(unsigned int vao, unsigned int vbo, GLsizei vertex_count) 
     : m_VAO(vao), 
       m_VBO(vbo), 
       m_VertexCount(vertex_count) 

@@ -56,9 +56,11 @@ struct ChunkMeshBuildContext {
     mc::Vector3i world_position;
 
     mc::block::BlockPtr GetBlock(const mc::Vector3i& world_pos) {
-        mc::Vector3i relative = world_pos - world_position + mc::Vector3i(1, 1, 1);
+        mc::Vector3i::value_type x = world_pos.x - world_position.x + 1;
+        mc::Vector3i::value_type y = world_pos.y - world_position.y + 1;
+        mc::Vector3i::value_type z = world_pos.z - world_position.z + 1;
 
-        return chunk_data[relative.y * 18 * 18 + relative.z * 18 + relative.x];
+        return chunk_data[y * 18 * 18 + z * 18 + x];
     }
 };
 
@@ -83,8 +85,6 @@ public:
     void ProcessChunks();
 
 private:
-    using AOCache = std::unordered_map<mc::Vector3i, int>;
-
     struct ChunkMeshBuildComparator {
         const glm::vec3& position;
 
@@ -111,7 +111,7 @@ private:
         VertexPush(const mc::Vector3i& pos, std::unique_ptr<std::vector<Vertex>> vertices) : pos(pos), vertices(std::move(vertices)) { }
     };
 
-    int GetAmbientOcclusion(ChunkMeshBuildContext& context, AOCache& cache, const mc::Vector3i& side1, const mc::Vector3i& side2, const mc::Vector3i& corner);
+    int GetAmbientOcclusion(ChunkMeshBuildContext& context, const mc::Vector3i& side1, const mc::Vector3i& side2, const mc::Vector3i& corner);
     bool IsOccluding(terra::block::BlockModel* from, terra::block::BlockFace face, mc::block::BlockPtr test_block);
     void WorkerUpdate();
 
