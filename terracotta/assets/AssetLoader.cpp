@@ -28,7 +28,7 @@ glm::vec3 GetVectorFromJson(const mc::json& node) {
     int index = 0;
 
     for (auto& n : node) {
-        if (n.is_number_integer()) {
+        if (n.is_number()) {
             result[index++] = n.get<glm::vec3::value_type>() / static_cast<glm::vec3::value_type>(16.0);
         }
     }
@@ -262,7 +262,6 @@ std::size_t AssetLoader::LoadBlockModels(terra::assets::ZipArchive& archive) {
 
         // Resolve intermediate textures
         for (const IntermediateElement& intermediate : intermediates) {
-
             block::BlockElement element(intermediate.from, intermediate.to);
 
             for (const auto& intermediate_renderable : intermediate.faces) {

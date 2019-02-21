@@ -69,12 +69,17 @@ void Game::Update() {
     if (m_Window.IsKeyDown(GLFW_KEY_A)) {
         glm::vec3 right = m_Camera.GetRight();
 
+        right.y = 0;
+        right = glm::normalize(right);
+
         target_pos -= mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed * m_DeltaTime;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_D)) {
-
         glm::vec3 right = m_Camera.GetRight();
+
+        right.y = 0;
+        right = glm::normalize(right);
 
         target_pos += mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed * m_DeltaTime;
     }

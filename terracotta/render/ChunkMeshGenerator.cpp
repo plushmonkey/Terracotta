@@ -223,8 +223,8 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
             for (int x = 0; x < 16; ++x) {
                 mc::Vector3i mc_pos = context.world_position + mc::Vector3i(x, y, z);
                 mc::block::BlockPtr block = context.GetBlock(mc_pos);
-                
                 terra::block::BlockModel* model = g_AssetCache->GetVariant(block);
+
                 if (model == nullptr) continue;
 
                 static const glm::vec3 grass_tint(137 / 255.0, 191 / 255.0, 98 / 255.0);
@@ -233,7 +233,6 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
 
                 mc::block::BlockPtr above = context.GetBlock(mc_pos + mc::Vector3i(0, 1, 0));
                 if (!IsOccluding(model, block::BlockFace::Up, above)) {
-               // if (above == nullptr || !above->IsSolid()) {
                     // Render the top face of the current block.
                     int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 1, -1));
                     int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 1, 1));
@@ -248,9 +247,9 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                         const auto& to = element.GetTo();
 
                         glm::vec3 bottom_left = base + glm::vec3(from.x, to.y, from.z);
-                        glm::vec3 bottom_right = bottom_left + glm::vec3(0, 0, to.z);
-                        glm::vec3 top_left = bottom_left + glm::vec3(to.x, 0, 0);
-                        glm::vec3 top_right = bottom_left + glm::vec3(to.x, 0, to.z - from.z);
+                        glm::vec3 bottom_right = base + glm::vec3(from.x, to.y, to.z);
+                        glm::vec3 top_left = base + glm::vec3(to.x, to.y, from.z);
+                        glm::vec3 top_right = base + glm::vec3(to.x, to.y, to.z);
 
                         glm::vec3 tint(1.0f, 1.0f, 1.0f);
 
@@ -294,9 +293,9 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                         const auto& to = element.GetTo();
 
                         glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, from.z);
-                        glm::vec3 bottom_right = bottom_left + glm::vec3(0, 0, to.z);
-                        glm::vec3 top_left = bottom_left + glm::vec3(-to.x, 0, 0);
-                        glm::vec3 top_right = bottom_left + glm::vec3(-to.x, 0, to.z);
+                        glm::vec3 bottom_right = base + glm::vec3(to.x, from.y, to.z);
+                        glm::vec3 top_left = base + glm::vec3(from.x, from.y, from.z);
+                        glm::vec3 top_right = base + glm::vec3(from.x, from.y, to.z);
 
                         glm::vec3 tint(1.0f, 1.0f, 1.0f);
 
@@ -341,10 +340,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(1 - from.x, from.y, from.z);
-                            glm::vec3 bottom_right = bottom_left + glm::vec3(-to.x, 0, 0);
-                            glm::vec3 top_left = bottom_left + glm::vec3(0, to.y, 0);
-                            glm::vec3 top_right = bottom_left + glm::vec3(-to.x, to.y, 0);
+                            glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, from.z);
+                            glm::vec3 bottom_right = base + glm::vec3(from.x, from.y, from.z);
+                            glm::vec3 top_left = base + glm::vec3(to.x, to.y, from.z);
+                            glm::vec3 top_right = base + glm::vec3(from.x, to.y, from.z);
 
                             glm::vec3 tint(1.0f, 1.0f, 1.0f);
 
@@ -391,10 +390,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(from.x, from.y, 1 + from.z);
-                            glm::vec3 bottom_right = bottom_left + glm::vec3(to.x, 0, 0);
-                            glm::vec3 top_left = bottom_left + glm::vec3(0, to.y, 0);
-                            glm::vec3 top_right = bottom_left + glm::vec3(to.x, to.y, 0);
+                            glm::vec3 bottom_left = base + glm::vec3(from.x, from.y, to.z);
+                            glm::vec3 bottom_right = base + glm::vec3(to.x, from.y, to.z);
+                            glm::vec3 top_left = base + glm::vec3(from.x, to.y, to.z);
+                            glm::vec3 top_right = base + glm::vec3(to.x, to.y, to.z);
 
                             glm::vec3 tint(1.0f, 1.0f, 1.0f);
 
@@ -440,10 +439,10 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(1 + from.x, from.y, 1 + from.z);
-                            glm::vec3 bottom_right = bottom_left + glm::vec3(0, 0, -to.z);
-                            glm::vec3 top_left = bottom_left + glm::vec3(0, to.y, 0);
-                            glm::vec3 top_right = bottom_left + glm::vec3(0, to.y, -to.z);
+                            glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, to.z);
+                            glm::vec3 bottom_right = base + glm::vec3(to.x, from.y, from.z);
+                            glm::vec3 top_left = base + glm::vec3(to.x, to.y, to.z);
+                            glm::vec3 top_right = base + glm::vec3(to.x, to.y, from.z);
 
                             glm::vec3 tint(1.0f, 1.0f, 1.0f);
 
