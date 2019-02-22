@@ -217,6 +217,12 @@ bool ChunkMeshGenerator::IsOccluding(terra::block::BlockModel* from, terra::bloc
 void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
     std::unique_ptr<std::vector<Vertex>> vertices = std::make_unique<std::vector<Vertex>>();
 
+    static const glm::vec3 kTints[] = {
+        glm::vec3(1.0, 1.0, 1.0),
+        glm::vec3(137 / 255.0, 191 / 255.0, 98 / 255.0), // Grass
+        glm::vec3(0.22, 0.60, 0.21), // Leaves
+    };
+
     // Sweep through the blocks and generate vertices for the mesh
     for (int y = 0; y < 16; ++y) {
         for (int z = 0; z < 16; ++z) {
@@ -225,9 +231,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                 mc::block::BlockPtr block = context.GetBlock(mc_pos);
                 terra::block::BlockModel* model = g_AssetCache->GetVariant(block);
 
-                if (model == nullptr) continue;
-
-                static const glm::vec3 grass_tint(137 / 255.0, 191 / 255.0, 98 / 255.0);
+                if (model == nullptr || model->GetElements().empty()) continue;
 
                 const glm::vec3 base = terra::math::VecToGLM(mc_pos);
 
@@ -241,37 +245,25 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::Up);
-                        assets::TextureHandle texture = renderable.texture;
+                        if (renderable.face == block::BlockFace::Up) {
+                            assets::TextureHandle texture = renderable.texture;
 
-                        const auto& from = element.GetFrom();
-                        const auto& to = element.GetTo();
+                            const auto& from = element.GetFrom();
+                            const auto& to = element.GetTo();
 
-                        glm::vec3 bottom_left = base + glm::vec3(from.x, to.y, from.z);
-                        glm::vec3 bottom_right = base + glm::vec3(from.x, to.y, to.z);
-                        glm::vec3 top_left = base + glm::vec3(to.x, to.y, from.z);
-                        glm::vec3 top_right = base + glm::vec3(to.x, to.y, to.z);
+                            glm::vec3 bottom_left = base + glm::vec3(from.x, to.y, from.z);
+                            glm::vec3 bottom_right = base + glm::vec3(from.x, to.y, to.z);
+                            glm::vec3 top_left = base + glm::vec3(to.x, to.y, from.z);
+                            glm::vec3 top_right = base + glm::vec3(to.x, to.y, to.z);
 
-                        glm::vec3 tint(1.0f, 1.0f, 1.0f);
+                            const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
-                        if (renderable.tint_index != -1) {
-                            tint = grass_tint;
-                        }
-
-                        vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
-                        vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint, obr);
-                        vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
-
-                        vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
-                        vertices->emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint, otl);
-                        vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
-
-                        if (renderable.cull_face != block::BlockFace::Up) {
                             vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
-                            vertices->emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint, otl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint, obr);
                             vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
 
                             vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint, obr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint, otl);
                             vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
                         }
                     }
@@ -287,37 +279,26 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::Down);
-                        assets::TextureHandle texture = renderable.texture;
 
-                        const auto& from = element.GetFrom();
-                        const auto& to = element.GetTo();
+                        if (renderable.face == block::BlockFace::Down) {
+                            assets::TextureHandle texture = renderable.texture;
 
-                        glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, from.z);
-                        glm::vec3 bottom_right = base + glm::vec3(to.x, from.y, to.z);
-                        glm::vec3 top_left = base + glm::vec3(from.x, from.y, from.z);
-                        glm::vec3 top_right = base + glm::vec3(from.x, from.y, to.z);
+                            const auto& from = element.GetFrom();
+                            const auto& to = element.GetTo();
 
-                        glm::vec3 tint(1.0f, 1.0f, 1.0f);
+                            glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, from.z);
+                            glm::vec3 bottom_right = base + glm::vec3(to.x, from.y, to.z);
+                            glm::vec3 top_left = base + glm::vec3(from.x, from.y, from.z);
+                            glm::vec3 top_right = base + glm::vec3(from.x, from.y, to.z);
 
-                        if (renderable.tint_index != -1) {
-                            tint = grass_tint;
-                        }
+                            const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
-                        vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
-                        vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, tint, obr);
-                        vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
-
-                        vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
-                        vertices->emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, tint, otl);
-                        vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
-
-                        if (renderable.cull_face != block::BlockFace::Down) {
                             vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
-                            vertices->emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, tint, otl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, tint, obr);
                             vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
 
                             vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, tint, obr);
+                            vertices->emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, tint, otl);
                             vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
                         }
                     }
@@ -345,11 +326,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_left = base + glm::vec3(to.x, to.y, from.z);
                             glm::vec3 top_right = base + glm::vec3(from.x, to.y, from.z);
 
-                            glm::vec3 tint(1.0f, 1.0f, 1.0f);
-
-                            if (renderable.tint_index != -1) {
-                                tint = grass_tint;
-                            }
+                            const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
                             vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
                             vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
@@ -358,17 +335,6 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
                             vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
                             vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-
-                            if (renderable.cull_face != block::BlockFace::North) {
-                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-                                vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
-                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-
-                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-                                vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
-                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-
-                            }
                         }
                     }
                 }
@@ -395,11 +361,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_left = base + glm::vec3(from.x, to.y, to.z);
                             glm::vec3 top_right = base + glm::vec3(to.x, to.y, to.z);
 
-                            glm::vec3 tint(1.0f, 1.0f, 1.0f);
-
-                            if (renderable.tint_index != -1) {
-                                tint = grass_tint;
-                            }
+                            const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
                             vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
                             vertices->emplace_back(bottom_right, glm::vec3(0, 0, 1), glm::vec2(1, 0), texture, tint, obr);
@@ -408,16 +370,6 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
                             vertices->emplace_back(top_left, glm::vec3(0, 0, 1), glm::vec2(0, 1), texture, tint, otl);
                             vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
-
-                            if (renderable.cull_face != block::BlockFace::South) {
-                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
-                                vertices->emplace_back(top_left, glm::vec3(0, 0, 1), glm::vec2(0, 1), texture, tint, otl);
-                                vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
-
-                                vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
-                                vertices->emplace_back(bottom_right, glm::vec3(0, 0, 1), glm::vec2(1, 0), texture, tint, obr);
-                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
-                            }
                         }
                     }
                 }
@@ -444,11 +396,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_left = base + glm::vec3(to.x, to.y, to.z);
                             glm::vec3 top_right = base + glm::vec3(to.x, to.y, from.z);
 
-                            glm::vec3 tint(1.0f, 1.0f, 1.0f);
-
-                            if (renderable.tint_index != -1) {
-                                tint = grass_tint;
-                            }
+                            const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
                             vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
                             vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
@@ -457,16 +405,6 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
                             vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
                             vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-
-                            if (renderable.cull_face != block::BlockFace::East) {
-                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-                                vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
-                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-
-                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-                                vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
-                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-                            }
                         }
                     }
                 }
@@ -493,11 +431,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_left = base + glm::vec3(from.x, to.y, from.z);
                             glm::vec3 top_right = base + glm::vec3(from.x, to.y, to.z);
 
-                            glm::vec3 tint(1.0f, 1.0f, 1.0f);
-
-                            if (renderable.tint_index != -1) {
-                                tint = grass_tint;
-                            }
+                            const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
                             vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
                             vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
@@ -506,16 +440,6 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
                             vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
                             vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-
-                            if (renderable.cull_face != block::BlockFace::East) {
-                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-                                vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
-                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-
-                                vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-                                vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
-                                vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-                            }
                         }
                     }
                 }

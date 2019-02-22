@@ -48,7 +48,6 @@ private:
     using TextureMap = std::unordered_map<std::string, std::string>;
 
     bool LoadBlockStates(const std::string& filename);
-    bool LoadTextures(terra::assets::ZipArchive& archive);
     std::size_t LoadBlockModels(terra::assets::ZipArchive& archive);
     void LoadBlockVariants(terra::assets::ZipArchive& archive);
     bool LoadTexture(terra::assets::ZipArchive& archive, const std::string& path, TextureHandle* handle);

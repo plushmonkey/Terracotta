@@ -102,6 +102,8 @@ int main(int argc, char* argvp[]) {
     glEnable(GL_CULL_FACE);
     glEnable(GL_MULTISAMPLE);
 
+    glDepthFunc(GL_LEQUAL);
+
     terra::render::Shader shader;
 
     if (!shader.Initialize("shaders/block.vert", "shaders/block.frag")) {

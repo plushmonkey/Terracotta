@@ -54,11 +54,6 @@ bool AssetLoader::LoadArchive(const std::string& archive_path, const std::string
         return false;
     }
 
-    /*if (!LoadTextures(cache, archive)) {
-        std::cerr << "Failed to load textures.\n";
-        return false;
-    }*/
-
     if (LoadBlockModels(archive) <= 0) {
         return false;
     }
@@ -72,6 +67,7 @@ bool AssetLoader::LoadArchive(const std::string& archive_path, const std::string
         for (auto& element : model->GetElements()) {
             for (auto& face : element.GetFaces()) {
                 face.cull_face = block::BlockFace::None;
+                face.tint_index = 1;
             }
         }
     }
@@ -376,63 +372,6 @@ void AssetLoader::LoadBlockVariants(terra::assets::ZipArchive& archive) {
             }
         }
     }
-}
-
-
-bool AssetLoader::LoadTextures(terra::assets::ZipArchive& archive) {
-    for (std::string filename : archive.ListFiles("assets/minecraft/models/block/")) {
-        size_t file_size;
-
-        char* raw_data = archive.ReadFile(filename.c_str(), &file_size);
-        if (raw_data) {
-            std::string contents(raw_data, file_size);
-
-            mc::json root;
-            try {
-                root = mc::json::parse(contents);
-            } catch (mc::json::parse_error& e) {
-                std::cerr << e.what() << std::endl;
-                continue;
-            }
-
-            mc::json textures_node = root.value("textures", mc::json());
-
-            if (textures_node.is_object()) {
-                for (auto& kv : textures_node.items()) {
-                    mc::json type_node = kv.value();
-
-                    if (type_node.is_string()) {
-                        std::string texture_path = "assets/minecraft/textures/" + type_node.get<std::string>() + ".png";
-
-                        if (texture_path.find('#') == std::string::npos) {
-                            int width, height, channels;
-                            int texture_size;
-                            char* texture_raw = archive.ReadFile(texture_path.c_str(), reinterpret_cast<std::size_t*>(&texture_size));
-
-                            unsigned char* image = stbi_load_from_memory(reinterpret_cast<unsigned char*>(texture_raw), texture_size, &width, &height, &channels, STBI_rgb_alpha);
-
-                            if (image == nullptr) continue;
-
-                            if (width == 16) {
-                                std::size_t size = 16 * 16 * 4;
-                                auto pos = texture_path.find_last_of('/');
-                                auto filename = texture_path.substr(pos + 1);
-                                auto block_name = filename.substr(0, filename.length() - 4);
-                                std::string path = "block/" + block_name;
-
-                                m_Cache.AddTexture(path, std::string(reinterpret_cast<char*>(image), size));
-                            }
-
-                            stbi_image_free(image);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    m_Cache.GetTextures().Generate();
-    return true;
 }
 
 } // ns assets
