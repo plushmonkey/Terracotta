@@ -3,6 +3,7 @@
 #include "zip/ZipArchive.h"
 #include "stb_image.h"
 #include "../block/BlockModel.h"
+#include "../block/BlockVariant.h"
 
 #include <iostream>
 #include <fstream>
@@ -34,6 +35,26 @@ glm::vec3 GetVectorFromJson(const mc::json& node) {
     }
 
     return result;
+}
+
+std::pair<glm::vec2, glm::vec2> GetUVFromJson(const mc::json& node) {
+    glm::vec2 from(0, 0);
+    glm::vec2 to(1, 1);
+
+    int index = 0;
+
+    for (auto& n : node) {
+        if (n.is_number()) {
+            if (index < 2) {
+                from[index++] = n.get<glm::vec3::value_type>() / static_cast<glm::vec3::value_type>(16.0);
+            } else {
+                to[index - 2] = n.get<glm::vec3::value_type>() / static_cast<glm::vec3::value_type>(16.0);
+                ++index;
+            }
+        }
+    }
+
+    return std::make_pair<>(from, to);
 }
 
 AssetLoader::AssetLoader(AssetCache& cache) 
@@ -232,6 +253,8 @@ std::unique_ptr<block::BlockModel> AssetLoader::LoadBlockModel(terra::assets::Zi
                         renderable.face = face;
                         renderable.cull_face = cull_face;
                         renderable.tint_index = face_node.value("tintindex", -1);
+
+                        std::tie(renderable.uv_from, renderable.uv_to) = GetUVFromJson(face_node.value("uv", mc::json()));
                         
                         element.faces.push_back(renderable);
                     }
@@ -275,6 +298,8 @@ std::size_t AssetLoader::LoadBlockModels(terra::assets::ZipArchive& archive) {
                     renderable.cull_face = intermediate_renderable.cull_face;
                     renderable.texture = handle;
                     renderable.tint_index = intermediate_renderable.tint_index;
+                    renderable.uv_from = intermediate_renderable.uv_from;
+                    renderable.uv_to = intermediate_renderable.uv_to;
 
                     element.AddFace(renderable);
                 }
@@ -340,7 +365,15 @@ void AssetLoader::LoadBlockVariants(terra::assets::ZipArchive& archive) {
                                 continue;
                             }
 
-                            m_Cache.AddVariantModel(block->GetName(), variant_name, model);
+                            double x = variant_sub.value("x", 0);
+                            double y = variant_sub.value("y", 0);
+                            double z = variant_sub.value("z", 0);
+
+                            std::unique_ptr<block::BlockVariant> variant = std::make_unique<block::BlockVariant>(model, variant_name, block);
+
+                            variant->SetRotation(glm::vec3(x, y, z));
+
+                            m_Cache.AddVariantModel(std::move(variant));
                         }
                     }
                 } else {
@@ -366,7 +399,15 @@ void AssetLoader::LoadBlockVariants(terra::assets::ZipArchive& archive) {
                             continue;
                         }
 
-                        m_Cache.AddVariantModel(block->GetName(), variant_name, model);
+                        double x = variant.value("x", 0);
+                        double y = variant.value("y", 0);
+                        double z = variant.value("z", 0);
+
+                        std::unique_ptr<block::BlockVariant> variant = std::make_unique<block::BlockVariant>(model, variant_name, block);
+
+                        variant->SetRotation(glm::vec3(x, y, z));
+
+                        m_Cache.AddVariantModel(std::move(variant));
                     }
                 }
             }

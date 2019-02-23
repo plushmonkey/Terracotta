@@ -11,6 +11,7 @@
 #include "../World.h"
 #include "../PriorityQueue.h"
 #include "../block/BlockFace.h"
+#include "../block/BlockVariant.h"
 #include <mutex>
 #include <thread>
 #include <queue>
@@ -112,7 +113,7 @@ private:
     };
 
     int GetAmbientOcclusion(ChunkMeshBuildContext& context, const mc::Vector3i& side1, const mc::Vector3i& side2, const mc::Vector3i& corner);
-    bool IsOccluding(terra::block::BlockModel* from, terra::block::BlockFace face, mc::block::BlockPtr test_block);
+    bool IsOccluding(terra::block::BlockVariant* from_variant, terra::block::BlockFace face, mc::block::BlockPtr test_block);
     void WorkerUpdate();
 
     std::mutex m_QueueMutex;

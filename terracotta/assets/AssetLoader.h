@@ -26,6 +26,8 @@ struct IntermediateFace {
     block::BlockFace cull_face;
     std::string texture;
     int tint_index;
+    glm::vec2 uv_from;
+    glm::vec2 uv_to;
 };
 
 struct IntermediateElement {

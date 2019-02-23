@@ -8,6 +8,7 @@
 #include <memory>
 #include "../block/BlockState.h"
 #include "../block/BlockModel.h"
+#include "../block/BlockVariant.h"
 
 #include <mclib/block/Block.h>
 
@@ -28,24 +29,24 @@ public:
     TextureArray& GetTextures() { return m_TextureArray; }
     TextureHandle AddTexture(const std::string& path, const std::string& data);
 
-    void AddVariantModel(const std::string& block_name, const std::string& variant, block::BlockModel* model);
-    block::BlockModel* GetVariant(mc::block::BlockPtr block);
+    void AddVariantModel(std::unique_ptr<block::BlockVariant> variant);
+    block::BlockVariant* GetVariant(mc::block::BlockPtr block);
 
     std::vector<block::BlockModel*> GetBlockModels(const std::string& find);
     block::BlockModel* GetBlockModel(const std::string& path);
     void AddBlockModel(const std::string& path, std::unique_ptr<block::BlockModel> model);
 
 private:
-    block::BlockModel* GetVariantModel(const std::string& block_name, const std::string& variant);
+    block::BlockVariant* GetVariantFromProperties(const std::string& block_name, const std::string& properties);
 
     // Maps block id to the BlockState
     std::vector<std::unique_ptr<terra::block::BlockState>> m_BlockStates;
-    std::vector<terra::block::BlockModel*> m_VariantCache;
+    std::vector<terra::block::BlockVariant*> m_VariantCache;
 
     // Maps model path to a BlockModel
     std::unordered_map<std::string, std::unique_ptr<terra::block::BlockModel>> m_BlockModels;
-    // Block name -> (Variant String, BlockModel)
-    std::unordered_map<std::string, std::vector<std::pair<std::string, terra::block::BlockModel*>>> m_BlockVariants;
+    // Block name -> (list of Variants)
+    std::unordered_map<std::string, std::vector<std::unique_ptr<block::BlockVariant>>> m_BlockVariants;
 
     TextureArray m_TextureArray;
 };

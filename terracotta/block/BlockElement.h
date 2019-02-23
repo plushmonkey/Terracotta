@@ -16,6 +16,8 @@ struct RenderableFace {
     int tint_index;
     BlockFace face;
     BlockFace cull_face;
+    glm::vec2 uv_from;
+    glm::vec2 uv_to;
 };
 
 class BlockElement {

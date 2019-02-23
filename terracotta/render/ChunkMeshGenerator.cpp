@@ -6,9 +6,13 @@
 #include "../block/BlockState.h"
 #include <GL/glew.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <algorithm>
 #include <thread>
+#define _USE_MATH_DEFINES
+#include <math.h>
+#include <glm/gtc/quaternion.hpp>
 
 namespace terra {
 namespace render {
@@ -188,14 +192,21 @@ int ChunkMeshGenerator::GetAmbientOcclusion(ChunkMeshBuildContext& context, cons
     return 3 - (value1 + value2 + value_corner);
 }
 
-bool ChunkMeshGenerator::IsOccluding(terra::block::BlockModel* from, terra::block::BlockFace face, mc::block::BlockPtr test_block) {
-    for (auto& element : from->GetElements()) {
+bool ChunkMeshGenerator::IsOccluding(terra::block::BlockVariant* from_variant, terra::block::BlockFace face, mc::block::BlockPtr test_block) {
+    if (from_variant->HasRotation()) return false;
+
+    for (auto& element : from_variant->GetModel()->GetElements()) {
         if (element.GetFace(face).cull_face == block::BlockFace::None) {
             return false;
         }
     }
 
-    terra::block::BlockModel* model = g_AssetCache->GetVariant(test_block);
+    terra::block::BlockVariant* variant = g_AssetCache->GetVariant(test_block);
+    if (variant == nullptr) return false;
+
+    if (variant->HasRotation()) return false;
+
+    terra::block::BlockModel* model = variant->GetModel();
     if (model == nullptr) return false;
 
     bool is_full = false;
@@ -214,6 +225,39 @@ bool ChunkMeshGenerator::IsOccluding(terra::block::BlockModel* from, terra::bloc
     return is_full;
 }
 
+std::ostream& operator<<(std::ostream& out, const glm::vec3& vec) {
+    return out << "(" << vec.x << ", " << vec.y << ", " << vec.z << ")";
+}
+
+void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& top_left, glm::vec3& top_right, const glm::vec3& rotations) {
+    glm::quat quat = glm::identity<glm::quat>();
+
+    const glm::vec3 offset(0.5, 0.5, 0.5);
+
+    const float kToRads = (float)M_PI / 180.0f;
+
+    if (rotations.z != 0) {
+        quat = glm::rotate(quat, kToRads * rotations.z, glm::vec3(0.0f, 0.0f, 1.0f));
+    }
+
+    if (rotations.y != 0) {
+        quat = glm::rotate(quat, kToRads * -rotations.y, glm::vec3(0.0f, 1.0f, 0.0f));
+    }
+
+    if (rotations.x != 0) {
+        quat = glm::rotate(quat, kToRads * rotations.x, glm::vec3(1.0f, 0.0f, 0.0f));
+    }
+
+    if (rotations.x != 0 || rotations.y != 0 || rotations.z != 0) {
+        bottom_left = glm::vec3(quat * glm::vec4(bottom_left - offset, 1.0)) + offset;
+        bottom_right = glm::vec3(quat * glm::vec4(bottom_right - offset, 1.0)) + offset;
+        top_left = glm::vec3(quat * glm::vec4(top_left - offset, 1.0)) + offset;
+        top_right = glm::vec3(quat * glm::vec4(top_right - offset, 1.0)) + offset;
+    }
+}
+
+// TODO: Calculate occlusion under rotation
+// TODO: Calculate UV under rotation for UV locked variants
 void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
     std::unique_ptr<std::vector<Vertex>> vertices = std::make_unique<std::vector<Vertex>>();
 
@@ -229,19 +273,26 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
             for (int x = 0; x < 16; ++x) {
                 mc::Vector3i mc_pos = context.world_position + mc::Vector3i(x, y, z);
                 mc::block::BlockPtr block = context.GetBlock(mc_pos);
-                terra::block::BlockModel* model = g_AssetCache->GetVariant(block);
 
+                terra::block::BlockVariant* variant = g_AssetCache->GetVariant(block);
+                if (variant == nullptr) continue;
+
+                terra::block::BlockModel* model = variant->GetModel();
                 if (model == nullptr || model->GetElements().empty()) continue;
 
                 const glm::vec3 base = terra::math::VecToGLM(mc_pos);
 
                 mc::block::BlockPtr above = context.GetBlock(mc_pos + mc::Vector3i(0, 1, 0));
-                if (!IsOccluding(model, block::BlockFace::Up, above)) {
+                if (!IsOccluding(variant, block::BlockFace::Up, above)) {
                     // Render the top face of the current block.
-                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 1, -1));
-                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 1, 1));
-                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 1, -1));
-                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 1, 1));
+                    int obl = 3, obr = 3, otl = 3, otr = 3;
+
+                    if (!variant->HasRotation()) {
+                        obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 1, -1));
+                        obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 1, 1));
+                        otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 1, -1));
+                        otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 1, 1));
+                    }
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::Up);
@@ -251,31 +302,47 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(from.x, to.y, from.z);
-                            glm::vec3 bottom_right = base + glm::vec3(from.x, to.y, to.z);
-                            glm::vec3 top_left = base + glm::vec3(to.x, to.y, from.z);
-                            glm::vec3 top_right = base + glm::vec3(to.x, to.y, to.z);
+                            glm::vec3 bottom_left = glm::vec3(from.x, to.y, from.z);
+                            glm::vec3 bottom_right = glm::vec3(from.x, to.y, to.z);
+                            glm::vec3 top_left = glm::vec3(to.x, to.y, from.z);
+                            glm::vec3 top_right = glm::vec3(to.x, to.y, to.z);
+
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
+
+                            bottom_left += base;
+                            bottom_right += base;
+                            top_left += base;
+                            top_right += base;
 
                             const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), glm::vec2(0, 0), texture, tint, obr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
+                            glm::vec2 bl_uv(renderable.uv_from.x, renderable.uv_from.y);
+                            glm::vec2 br_uv(renderable.uv_from.x, renderable.uv_to.y);
+                            glm::vec2 tr_uv(renderable.uv_to.x, renderable.uv_to.y);
+                            glm::vec2 tl_uv(renderable.uv_to.x, renderable.uv_from.y);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 1, 0), glm::vec2(1, 0), texture, tint, otr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 1, 0), glm::vec2(1, 1), texture, tint, otl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), glm::vec2(0, 1), texture, tint, obl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), bl_uv, texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), br_uv, texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 1, 0), tr_uv, texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 1, 0), tr_uv, texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 1, 0), tl_uv, texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), bl_uv, texture, tint, obl);
                         }
                     }
                 }
 
                 mc::block::BlockPtr below = context.GetBlock(mc_pos - mc::Vector3i(0, 1, 0));
-                if (!IsOccluding(model, block::BlockFace::Down, below)) {
+                if (!IsOccluding(variant, block::BlockFace::Down, below)) {
                     // Render the bottom face of the current block.
-                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
-                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
-                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, -1, -1));
-                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
+                    int obl = 3, obr = 3, otl = 3, otr = 3;
+
+                    if (!variant->HasRotation()) {
+                        obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
+                        obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
+                        otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, -1, -1));
+                        otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
+                    }
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::Down);
@@ -286,31 +353,47 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, from.z);
-                            glm::vec3 bottom_right = base + glm::vec3(to.x, from.y, to.z);
-                            glm::vec3 top_left = base + glm::vec3(from.x, from.y, from.z);
-                            glm::vec3 top_right = base + glm::vec3(from.x, from.y, to.z);
+                            glm::vec3 bottom_left = glm::vec3(to.x, from.y, from.z);
+                            glm::vec3 bottom_right = glm::vec3(to.x, from.y, to.z);
+                            glm::vec3 top_left = glm::vec3(from.x, from.y, from.z);
+                            glm::vec3 top_right = glm::vec3(from.x, from.y, to.z);
+
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
+
+                            bottom_left += base;
+                            bottom_right += base;
+                            top_left += base;
+                            top_right += base;
 
                             const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), glm::vec2(1, 1), texture, tint, obr);
-                            vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
+                            glm::vec2 bl_uv(renderable.uv_to.x, renderable.uv_to.y);
+                            glm::vec2 br_uv(renderable.uv_to.x, renderable.uv_from.y);
+                            glm::vec2 tr_uv(renderable.uv_from.x, renderable.uv_from.y);
+                            glm::vec2 tl_uv(renderable.uv_from.x, renderable.uv_to.y);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, -1, 0), glm::vec2(0, 1), texture, tint, otr);
-                            vertices->emplace_back(top_left, glm::vec3(0, -1, 0), glm::vec2(0, 0), texture, tint, otl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), glm::vec2(1, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), bl_uv, texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), br_uv, texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, -1, 0), tr_uv, texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, -1, 0), tr_uv, texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, -1, 0), tl_uv, texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), bl_uv, texture, tint, obl);
                         }
                     }
                 }
 
                 mc::block::BlockPtr north = context.GetBlock(mc_pos + mc::Vector3i(0, 0, -1));
-                if (!IsOccluding(model, block::BlockFace::North, north)) {
+                if (!IsOccluding(variant, block::BlockFace::North, north)) {
                     // Render the north face of the current block.
-                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
-                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
-                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
-                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
+                    int obl = 3, obr = 3, otl = 3, otr = 3;
+
+                    if (!variant->HasRotation()) {
+                        obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(1, -1, -1));
+                        obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, -1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
+                        otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
+                        otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, -1), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
+                    }
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::North);
@@ -321,31 +404,47 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, from.z);
-                            glm::vec3 bottom_right = base + glm::vec3(from.x, from.y, from.z);
-                            glm::vec3 top_left = base + glm::vec3(to.x, to.y, from.z);
-                            glm::vec3 top_right = base + glm::vec3(from.x, to.y, from.z);
+                            glm::vec3 bottom_left = glm::vec3(to.x, from.y, from.z);
+                            glm::vec3 bottom_right = glm::vec3(from.x, from.y, from.z);
+                            glm::vec3 top_left = glm::vec3(to.x, to.y, from.z);
+                            glm::vec3 top_right = glm::vec3(from.x, to.y, from.z);
+
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
+
+                            bottom_left += base;
+                            bottom_right += base;
+                            top_left += base;
+                            top_right += base;
 
                             const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                            glm::vec2 bl_uv(renderable.uv_from.x, renderable.uv_to.y);
+                            glm::vec2 br_uv(renderable.uv_to.x, renderable.uv_to.y);
+                            glm::vec2 tr_uv(renderable.uv_to.x, renderable.uv_from.y);
+                            glm::vec2 tl_uv(renderable.uv_from.x, renderable.uv_from.y);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), br_uv, texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), tl_uv, texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, obl);
                         }
                     }
                 }
 
                 mc::block::BlockPtr south = context.GetBlock(mc_pos + mc::Vector3i(0, 0, 1));
-                if (!IsOccluding(model, block::BlockFace::South, south)) {
+                if (!IsOccluding(variant, block::BlockFace::South, south)) {
                     // Render the south face of the current block.
-                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
-                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
-                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
-                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
+                    int obl = 3, obr = 3, otl = 3, otr = 3;
+
+                    if (!variant->HasRotation()) {
+                        obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(-1, -1, 1));
+                        obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(0, -1, 1), mc_pos + mc::Vector3i(1, -1, 1));
+                        otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
+                        otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(0, 1, 1), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
+                    }
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::South);
@@ -356,31 +455,47 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(from.x, from.y, to.z);
-                            glm::vec3 bottom_right = base + glm::vec3(to.x, from.y, to.z);
-                            glm::vec3 top_left = base + glm::vec3(from.x, to.y, to.z);
-                            glm::vec3 top_right = base + glm::vec3(to.x, to.y, to.z);
+                            glm::vec3 bottom_left = glm::vec3(from.x, from.y, to.z);
+                            glm::vec3 bottom_right = glm::vec3(to.x, from.y, to.z);
+                            glm::vec3 top_left = glm::vec3(from.x, to.y, to.z);
+                            glm::vec3 top_right = glm::vec3(to.x, to.y, to.z);
+
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
+
+                            bottom_left += base;
+                            bottom_right += base;
+                            top_left += base;
+                            top_right += base;
 
                             const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, 1), glm::vec2(1, 0), texture, tint, obr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
+                            glm::vec2 bl_uv(renderable.uv_from.x, renderable.uv_to.y);
+                            glm::vec2 br_uv(renderable.uv_to.x, renderable.uv_to.y);
+                            glm::vec2 tr_uv(renderable.uv_to.x, renderable.uv_from.y);
+                            glm::vec2 tl_uv(renderable.uv_from.x, renderable.uv_from.y);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, 1), glm::vec2(1, 1), texture, tint, otr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 0, 1), glm::vec2(0, 1), texture, tint, otl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), glm::vec2(0, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), bl_uv, texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, 1), br_uv, texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, 1), tr_uv, texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, 1), tr_uv, texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 0, 1), tl_uv, texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), bl_uv, texture, tint, obl);
                         }
                     }
                 }
 
                 mc::block::BlockPtr east = context.GetBlock(mc_pos + mc::Vector3i(1, 0, 0));
-                if (!IsOccluding(model, block::BlockFace::East, east)) {
+                if (!IsOccluding(variant, block::BlockFace::East, east)) {
                     // Render the east face of the current block.
-                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, -1, 1));
-                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, -1, -1));
-                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
-                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
+                    int obl = 3, obr = 3, otl = 3, otr = 3;
+
+                    if (!variant->HasRotation()) {
+                        obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, -1, 1));
+                        obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, -1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, -1, -1));
+                        otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, 1), mc_pos + mc::Vector3i(1, 1, 1));
+                        otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(1, 1, 0), mc_pos + mc::Vector3i(1, 0, -1), mc_pos + mc::Vector3i(1, 1, -1));
+                    }
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::East);
@@ -391,31 +506,47 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(to.x, from.y, to.z);
-                            glm::vec3 bottom_right = base + glm::vec3(to.x, from.y, from.z);
-                            glm::vec3 top_left = base + glm::vec3(to.x, to.y, to.z);
-                            glm::vec3 top_right = base + glm::vec3(to.x, to.y, from.z);
+                            glm::vec3 bottom_left = glm::vec3(to.x, from.y, to.z);
+                            glm::vec3 bottom_right = glm::vec3(to.x, from.y, from.z);
+                            glm::vec3 top_left = glm::vec3(to.x, to.y, to.z);
+                            glm::vec3 top_right = glm::vec3(to.x, to.y, from.z);
+
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
+
+                            bottom_left += base;
+                            bottom_right += base;
+                            top_left += base;
+                            top_right += base;
 
                             const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                            glm::vec2 bl_uv(renderable.uv_from.x, renderable.uv_to.y);
+                            glm::vec2 br_uv(renderable.uv_to.x, renderable.uv_to.y);
+                            glm::vec2 tr_uv(renderable.uv_to.x, renderable.uv_from.y);
+                            glm::vec2 tl_uv(renderable.uv_from.x, renderable.uv_from.y);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), br_uv, texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), tl_uv, texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, obl);
                         }
                     }
                 }
 
                 mc::block::BlockPtr west = context.GetBlock(mc_pos + mc::Vector3i(-1, 0, 0));
-                if (!IsOccluding(model, block::BlockFace::West, west)) {
+                if (!IsOccluding(variant, block::BlockFace::West, west)) {
                     // Render the west face of the current block.
-                    int obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
-                    int obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, -1, 1));
-                    int otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
-                    int otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
+                    int obl = 3, obr = 3, otl = 3, otr = 3;
+
+                    if (!variant->HasRotation()) {
+                        obl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, -1, -1));
+                        obr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, -1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, -1, 1));
+                        otl = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, -1), mc_pos + mc::Vector3i(-1, 1, -1));
+                        otr = GetAmbientOcclusion(context, mc_pos + mc::Vector3i(-1, 1, 0), mc_pos + mc::Vector3i(-1, 0, 1), mc_pos + mc::Vector3i(-1, 1, 1));
+                    }
 
                     for (const auto& element : model->GetElements()) {
                         block::RenderableFace renderable = element.GetFace(block::BlockFace::West);
@@ -426,20 +557,32 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             const auto& from = element.GetFrom();
                             const auto& to = element.GetTo();
 
-                            glm::vec3 bottom_left = base + glm::vec3(from.x, from.y, from.z);
-                            glm::vec3 bottom_right = base + glm::vec3(from.x, from.y, to.z);
-                            glm::vec3 top_left = base + glm::vec3(from.x, to.y, from.z);
-                            glm::vec3 top_right = base + glm::vec3(from.x, to.y, to.z);
+                            glm::vec3 bottom_left = glm::vec3(from.x, from.y, from.z);
+                            glm::vec3 bottom_right = glm::vec3(from.x, from.y, to.z);
+                            glm::vec3 top_left = glm::vec3(from.x, to.y, from.z);
+                            glm::vec3 top_right = glm::vec3(from.x, to.y, to.z);
+
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
+
+                            bottom_left += base;
+                            bottom_right += base;
+                            top_left += base;
+                            top_right += base;
 
                             const glm::vec3& tint = kTints[renderable.tint_index + 1];
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), glm::vec2(1, 0), texture, tint, obr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
+                            glm::vec2 bl_uv(renderable.uv_from.x, renderable.uv_to.y);
+                            glm::vec2 br_uv(renderable.uv_to.x, renderable.uv_to.y);
+                            glm::vec2 tr_uv(renderable.uv_to.x, renderable.uv_from.y);
+                            glm::vec2 tl_uv(renderable.uv_from.x, renderable.uv_from.y);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), glm::vec2(1, 1), texture, tint, otr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), glm::vec2(0, 1), texture, tint, otl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), glm::vec2(0, 0), texture, tint, obl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, obl);
+                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), br_uv, texture, tint, obr);
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, otr);
+
+                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, otr);
+                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), tl_uv, texture, tint, otl);
+                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, obl);
                         }
                     }
                 }

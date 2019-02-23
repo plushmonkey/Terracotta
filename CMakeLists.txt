@@ -27,6 +27,7 @@ add_executable(terracotta
     terracotta/block/BlockModel.h
     terracotta/block/BlockState.cpp
     terracotta/block/BlockState.h
+    terracotta/block/BlockVariant.h
     terracotta/Camera.cpp
     terracotta/Camera.h
     terracotta/ChatWindow.cpp

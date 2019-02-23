@@ -57,34 +57,34 @@ void AssetCache::AddBlockModel(const std::string& path, std::unique_ptr<block::B
     m_BlockModels[path] = std::move(model);
 }
 
-terra::block::BlockModel* AssetCache::GetVariantModel(const std::string& block_name, const std::string& variant) {
+block::BlockVariant* AssetCache::GetVariantFromProperties(const std::string& block_name, const std::string& properties) {
     auto block_iter = m_BlockVariants.find(block_name);
 
     if (block_iter == m_BlockVariants.end()) return nullptr;
 
-    for (auto&& kv : block_iter->second) {
-        if (variant.find(kv.first) != std::string::npos) {
-            return kv.second;
+    for (auto&& variant : block_iter->second) {
+        if (properties.find(variant->GetProperties()) != std::string::npos) {
+            return variant.get();
         }
     }
 
     return nullptr;
 }
 
-void AssetCache::AddVariantModel(const std::string& block_name, const std::string& variant, block::BlockModel* model) {
-    m_BlockVariants[block_name].push_back(std::make_pair<>(variant, model));
+void AssetCache::AddVariantModel(std::unique_ptr<block::BlockVariant> variant) {
+    m_BlockVariants[variant->GetBlock()->GetName()].push_back(std::move(variant));
 }
 
-block::BlockModel* AssetCache::GetVariant(mc::block::BlockPtr block) {
-    block::BlockModel* model = m_VariantCache[block->GetType()];
+block::BlockVariant* AssetCache::GetVariant(mc::block::BlockPtr block) {
+    block::BlockVariant* variant = m_VariantCache[block->GetType()];
 
-    if (model == nullptr) {
-        model = GetVariantModel(block->GetName(), GetBlockState(block->GetType())->GetVariant());
+    if (variant == nullptr) {
+        variant = GetVariantFromProperties(block->GetName(), GetBlockState(block->GetType())->GetVariant());
 
-        m_VariantCache[block->GetType()] = model;
+        m_VariantCache[block->GetType()] = variant;
     }
 
-    return model;
+    return variant;
 }
 
 } // ns assets
