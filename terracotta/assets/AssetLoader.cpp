@@ -233,6 +233,25 @@ std::unique_ptr<block::BlockModel> AssetLoader::LoadBlockModel(terra::assets::Zi
                 IntermediateElement element;
                 element.from = from;
                 element.to = to;
+                element.shade = element_node.value("shade", true);
+
+                auto rotation_node = element_node.value("rotation", mc::json());
+
+                if (rotation_node.is_object()) {
+                    element.rotation.origin = GetVectorFromJson(rotation_node.value("origin", mc::json()));
+                    std::string axis = rotation_node.value("axis", "y");
+
+                    if (axis == "x") {
+                        element.rotation.axis = glm::vec3(1, 0, 0);
+                    } else if (axis == "y") {
+                        element.rotation.axis = glm::vec3(0, 1, 0);
+                    } else {
+                        element.rotation.axis = glm::vec3(0, 0, 1);
+                    }
+
+                    element.rotation.angle = rotation_node.value("angle", 0.0f);
+                    element.rotation.rescale = rotation_node.value("rescale", false);
+                }
 
                 auto faces_node = element_node.value("faces", mc::json());
 
@@ -282,6 +301,9 @@ std::size_t AssetLoader::LoadBlockModels(terra::assets::ZipArchive& archive) {
         // Resolve intermediate textures
         for (const IntermediateElement& intermediate : intermediates) {
             block::BlockElement element(intermediate.from, intermediate.to);
+
+            element.SetShouldShade(intermediate.shade);
+            element.GetRotation() = intermediate.rotation;
 
             for (const auto& intermediate_renderable : intermediate.faces) {
                 std::string texture = intermediate_renderable.texture;

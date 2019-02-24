@@ -5,7 +5,6 @@
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <fstream>
-#include <unordered_map>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <mclib/core/Client.h>
@@ -16,9 +15,6 @@
 #include "ChatWindow.h"
 #include "math/TypeUtil.h"
 
-#include "block/BlockFace.h"
-#include "block/BlockModel.h"
-#include "block/BlockState.h"
 #include "render/ChunkMesh.h"
 #include "render/ChunkMeshGenerator.h"
 #include "assets/AssetCache.h"

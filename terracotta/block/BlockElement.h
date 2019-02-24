@@ -20,6 +20,15 @@ struct RenderableFace {
     glm::vec2 uv_to;
 };
 
+struct ElementRotation {
+    glm::vec3 origin;
+    glm::vec3 axis;
+    float angle;
+    bool rescale;
+
+    ElementRotation() : origin(0, 0, 0), axis(0, 0, 0), angle(0), rescale(false) { }
+};
+
 class BlockElement {
 public:
     BlockElement(glm::vec3 from, glm::vec3 to) : m_From(from), m_To(to) {
@@ -38,10 +47,18 @@ public:
     const glm::vec3& GetFrom() const { return m_From; }
     const glm::vec3& GetTo() const { return m_To; }
 
+    void SetShouldShade(bool shade) { m_Shade = shade; }
+    bool ShouldShade() const { return m_Shade; }
+
+    ElementRotation& GetRotation() { return m_Rotation; }
+    const ElementRotation& GetRotation() const { return m_Rotation; }
+
 private:
     std::vector<RenderableFace> m_Faces;
     glm::vec3 m_From;
     glm::vec3 m_To;
+    bool m_Shade;
+    ElementRotation m_Rotation;
 };
 
 } // ns block

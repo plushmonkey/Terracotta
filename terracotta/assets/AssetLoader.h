@@ -10,6 +10,7 @@
 
 #include "TextureArray.h"
 #include "../block/BlockFace.h"
+#include "../block/BlockElement.h"
 
 namespace terra {
 
@@ -21,6 +22,7 @@ class BlockModel;
 
 namespace assets {
 
+// Stores the intermediate faces of a block. The textures are resolved later and stored into a final RenderableFace.
 struct IntermediateFace {
     block::BlockFace face;
     block::BlockFace cull_face;
@@ -30,9 +32,12 @@ struct IntermediateFace {
     glm::vec2 uv_to;
 };
 
+// Stores the intermediate element for a BlockModel. The faces are resolved later and stored in a final BlockElement.
 struct IntermediateElement {
     glm::vec3 from;
     glm::vec3 to;
+    bool shade;
+    block::ElementRotation rotation;
 
     std::vector<IntermediateFace> faces;
 };
