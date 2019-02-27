@@ -36,6 +36,16 @@ GLFWwindow* InitializeWindow();
 std::unique_ptr<terra::GameWindow> g_GameWindow;
 std::unique_ptr<terra::assets::AssetCache> g_AssetCache;
 
+struct CubeVertex {
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec2 uv;
+    u32 texture_index;
+    glm::vec3 tint;
+
+    CubeVertex(glm::vec3 pos, glm::vec3 normal, glm::vec2 uv, u32 tex_index, glm::vec3 tint) : position(pos), normal(normal), uv(uv), texture_index(tex_index), tint(tint) { }
+};
+
 int main(int argc, char* argvp[]) {
     mc::protocol::Version version = mc::protocol::Version::Minecraft_1_13_2;
     mc::block::BlockRegistry::GetInstance()->RegisterVanillaBlocks(version);
@@ -227,16 +237,6 @@ int main(int argc, char* argvp[]) {
     return 0;
 }
 
-struct CubeVertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec2 uv;
-    u32 texture_index;
-    glm::vec3 tint;
-
-    CubeVertex(glm::vec3 pos, glm::vec3 normal, glm::vec2 uv, u32 tex_index, glm::vec3 tint) : position(pos), normal(normal), uv(uv), texture_index(tex_index), tint(tint) { }
-};
-
 GLuint CreateBlockVAO() {
     GLuint vao = 0;
 
@@ -299,21 +299,17 @@ GLuint CreateBlockVAO() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CubeVertex), (void*)offsetof(CubeVertex, position));
     glEnableVertexAttribArray(0);
 
-    // Normal
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(CubeVertex), (void*)offsetof(CubeVertex, normal));
+    // TextureCoord
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(CubeVertex), (void*)offsetof(CubeVertex, uv));
     glEnableVertexAttribArray(1);
 
     // TextureCoord
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(CubeVertex), (void*)offsetof(CubeVertex, uv));
+    glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(CubeVertex), (void*)offsetof(CubeVertex, texture_index));
     glEnableVertexAttribArray(2);
 
-    // TextureCoord
-    glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, sizeof(CubeVertex), (void*)offsetof(CubeVertex, texture_index));
-    glEnableVertexAttribArray(3);
-
     // Tint
-    glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(CubeVertex), (void*)offsetof(CubeVertex, tint));
-    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(CubeVertex), (void*)offsetof(CubeVertex, tint));
+    glEnableVertexAttribArray(3);
     
     return vao;
 }

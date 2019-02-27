@@ -14,7 +14,13 @@ bool GameWindow::IsKeyDown(int code) {
 
 void GameWindow::OnKeyChange(int key, int code, int action, int mode) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        glfwSetWindowShouldClose(m_Window, GL_TRUE);
+        m_UpdateMouse = !m_UpdateMouse;
+
+        if (m_UpdateMouse) {
+            glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        } else {
+            glfwSetInputMode(m_Window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
     }
 
     if (key == GLFW_KEY_1 && action == GLFW_PRESS) {
@@ -69,12 +75,16 @@ void GameWindow::OnMouseMove(double x, double y) {
 }
 
 void GameWindow::OnMouseButton(int button, int action, int mods) {
+    if (!m_UpdateMouse) return;
+
     for (auto&& cb : m_MouseButtonCallbacks) {
         cb(button, action, mods);
     }
 }
 
 void GameWindow::OnMouseScroll(double offset_x, double offset_y) {
+    if (!m_UpdateMouse) return;
+
     for (auto&& cb : m_MouseScrollCallbacks) {
         cb(offset_x, offset_y);
     }

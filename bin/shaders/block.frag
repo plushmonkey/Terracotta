@@ -1,12 +1,9 @@
 #version 330
 
 in vec2 TexCoord;
-in vec3 varyingPosition;
-in vec3 varyingNormal;
 flat in uint texIndex;
 in vec3 varyingTint;
 
-uniform sampler2D texture1;
 uniform sampler2DArray texarray;
 uniform vec3 tint;
 

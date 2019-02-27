@@ -41,18 +41,37 @@ ChunkMeshGenerator::~ChunkMeshGenerator() {
 void ChunkMeshGenerator::OnBlockChange(mc::Vector3i position, mc::block::BlockPtr newBlock, mc::block::BlockPtr oldBlock) {
     terra::ChunkColumnPtr column = m_World->GetChunk(position);
     const mc::Vector3i chunk_base(column->GetMetadata().x * 16, (position.y / 16) * 16, column->GetMetadata().z * 16);
-
-    auto iter = m_ChunkMeshes.find(chunk_base);
-
-    if (iter == m_ChunkMeshes.end()) return;
-
     int chunk_x = column->GetMetadata().x;
     int chunk_y = static_cast<int>(position.y / 16);
     int chunk_z = column->GetMetadata().z;
 
+    auto iter = m_ChunkMeshes.find(chunk_base);
+
+    if (iter == m_ChunkMeshes.end()) {
+        GenerateMesh(chunk_x, chunk_y, chunk_z);
+        return;
+    }
+
     // TODO: Incremental update somehow?
-    DestroyChunk(chunk_x, chunk_y, chunk_z);
     GenerateMesh(chunk_x, chunk_y, chunk_z);
+
+    if (position.x % 16 == 0) {
+        GenerateMesh(chunk_x - 1, chunk_y, chunk_z);
+    } else if (position.x % 16 == 15) {
+        GenerateMesh(chunk_x + 1, chunk_y, chunk_z);
+    }
+
+    if (position.y % 16 == 0) {
+        GenerateMesh(chunk_x, chunk_y - 1, chunk_z);
+    } else if (position.y % 16 == 15) {
+        GenerateMesh(chunk_x, chunk_y + 1, chunk_z);
+    }
+
+    if (position.z % 16 == 0) {
+        GenerateMesh(chunk_x, chunk_y, chunk_z - 1);
+    } else if (position.z % 16 == 15) {
+        GenerateMesh(chunk_x, chunk_y, chunk_z + 1);
+    }
 }
 
 void ChunkMeshGenerator::OnChunkLoad(terra::ChunkPtr chunk, const terra::ChunkColumnMetadata& meta, u16 index_y) {
@@ -128,6 +147,8 @@ void ChunkMeshGenerator::ProcessChunks() {
     }
 
     for (auto&& push : pushes) {
+        DestroyChunk(push->pos.x / 16, push->pos.y / 16, push->pos.z / 16);
+
         auto&& vertices = push->vertices;
 
         GLuint vao = 0;
@@ -146,25 +167,21 @@ void ChunkMeshGenerator::ProcessChunks() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
         glEnableVertexAttribArray(0);
 
-        // Normal
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+        // TextureCoord
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
         glEnableVertexAttribArray(1);
 
-        // TextureCoord
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+        // TextureIndex
+        glVertexAttribIPointer(2, 1, GL_UNSIGNED_INT, sizeof(Vertex), (void*)offsetof(Vertex, texture_index));
         glEnableVertexAttribArray(2);
 
-        // TextureIndex
-        glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, sizeof(Vertex), (void*)offsetof(Vertex, texture_index));
+        // Tint
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
         glEnableVertexAttribArray(3);
 
-        // Tint
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tint));
-        glEnableVertexAttribArray(4);
-
         // Ambient occlusion
-        glVertexAttribIPointer(5, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, ambient_occlusion));
-        glEnableVertexAttribArray(5);
+        glVertexAttribIPointer(4, 1, GL_UNSIGNED_BYTE, sizeof(Vertex), (void*)offsetof(Vertex, ambient_occlusion));
+        glEnableVertexAttribArray(4);
 
         GLenum error;
 
@@ -255,13 +272,29 @@ void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& 
 }
 
 // TODO: Rescaling?
-void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& top_left, glm::vec3& top_right, const block::ElementRotation& rotation) {
+void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& top_left, glm::vec3& top_right, const glm::vec3& variant_rotation, const block::ElementRotation& rotation) {
     glm::vec3 rotations(rotation.angle, rotation.angle, rotation.angle);
 
-    // Hadamard product to get just the one axis rotation
-    rotations = rotations * rotation.axis;
+    glm::quat quat = glm::identity<glm::quat>();
 
-    ApplyRotations(bottom_left, bottom_right, top_left, top_right, rotations, rotation.origin);
+    const float kToRads = (float)M_PI / 180.0f;
+
+    if (variant_rotation.z != 0) {
+        quat = glm::rotate(quat, kToRads * variant_rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+    }
+
+    if (variant_rotation.y != 0) {
+        quat = glm::rotate(quat, kToRads * -variant_rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+    }
+
+    if (variant_rotation.x != 0) {
+        quat = glm::rotate(quat, kToRads * variant_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+    }
+    
+    // Hadamard product to get just the one axis rotation
+    rotations = rotations * (quat * rotation.axis);
+
+    ApplyRotations(bottom_left, bottom_right, top_left, top_right, rotations, quat * (rotation.origin - glm::vec3(0.5, 0.5, 0.5)) + glm::vec3(0.5, 0.5, 0.5));
 }
 
 // TODO: Calculate occlusion under rotation
@@ -316,7 +349,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_right = glm::vec3(to.x, to.y, to.z);
 
                             ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
-                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, element.GetRotation());
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations(), element.GetRotation());
 
                             bottom_left += base;
                             bottom_right += base;
@@ -335,13 +368,13 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                                 cobl = obl; cobr = obr; cotl = otl; cotr = otr;
                             }
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), bl_uv, texture, tint, cobl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 1, 0), br_uv, texture, tint, cobr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 1, 0), tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(bottom_right, br_uv, texture, tint, cobr);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 1, 0), tr_uv, texture, tint, cotr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 1, 0), tl_uv, texture, tint, cotl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 1, 0), bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(top_left, tl_uv, texture, tint, cotl);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
                         }
                     }
                 }
@@ -373,7 +406,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_right = glm::vec3(from.x, from.y, to.z);
 
                             ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
-                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, element.GetRotation());
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations(), element.GetRotation());
 
                             bottom_left += base;
                             bottom_right += base;
@@ -392,13 +425,13 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                                 cobl = obl; cobr = obr; cotl = otl; cotr = otr;
                             }
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), bl_uv, texture, tint, cobl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, -1, 0), br_uv, texture, tint, cobr);
-                            vertices->emplace_back(top_right, glm::vec3(0, -1, 0), tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(bottom_right, br_uv, texture, tint, cobr);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, -1, 0), tr_uv, texture, tint, cotr);
-                            vertices->emplace_back(top_left, glm::vec3(0, -1, 0), tl_uv, texture, tint, cotl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, -1, 0), bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(top_left, tl_uv, texture, tint, cotl);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
                         }
                     }
                 }
@@ -430,7 +463,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_right = glm::vec3(from.x, to.y, from.z);
 
                             ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
-                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, element.GetRotation());
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations(), element.GetRotation());
 
                             bottom_left += base;
                             bottom_right += base;
@@ -449,13 +482,13 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                                 cobl = obl; cobr = obr; cotl = otl; cotr = otr;
                             }
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, cobl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), br_uv, texture, tint, cobr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(bottom_right, br_uv, texture, tint, cobr);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, cotr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), tl_uv, texture, tint, cotl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(top_left, tl_uv, texture, tint, cotl);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
                         }
                     }
                 }
@@ -487,7 +520,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_right = glm::vec3(to.x, to.y, to.z);
 
                             ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
-                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, element.GetRotation());
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations(), element.GetRotation());
 
                             bottom_left += base;
                             bottom_right += base;
@@ -506,13 +539,13 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                                 cobl = obl; cobr = obr; cotl = otl; cotr = otr;
                             }
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), bl_uv, texture, tint, cobl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, 1), br_uv, texture, tint, cobr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, 1), tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(bottom_right, br_uv, texture, tint, cobr);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, 1), tr_uv, texture, tint, cotr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 0, 1), tl_uv, texture, tint, cotl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, 1), bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(top_left, tl_uv, texture, tint, cotl);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
                         }
                     }
                 }
@@ -544,7 +577,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_right = glm::vec3(to.x, to.y, from.z);
 
                             ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
-                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, element.GetRotation());
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations(), element.GetRotation());
 
                             bottom_left += base;
                             bottom_right += base;
@@ -563,13 +596,13 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                                 cobl = obl; cobr = obr; cotl = otl; cotr = otr;
                             }
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, cobl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), br_uv, texture, tint, cobr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(bottom_right, br_uv, texture, tint, cobr);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, cotr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), tl_uv, texture, tint, cotl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(top_left, tl_uv, texture, tint, cotl);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
                         }
                     }
                 }
@@ -601,7 +634,7 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                             glm::vec3 top_right = glm::vec3(from.x, to.y, to.z);
 
                             ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations());
-                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, element.GetRotation());
+                            ApplyRotations(bottom_left, bottom_right, top_left, top_right, variant->GetRotations(), element.GetRotation());
 
                             bottom_left += base;
                             bottom_right += base;
@@ -620,13 +653,13 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
                                 cobl = obl; cobr = obr; cotl = otl; cotr = otr;
                             }
 
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, cobl);
-                            vertices->emplace_back(bottom_right, glm::vec3(0, 0, -1), br_uv, texture, tint, cobr);
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(bottom_right, br_uv, texture, tint, cobr);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
 
-                            vertices->emplace_back(top_right, glm::vec3(0, 0, -1), tr_uv, texture, tint, cotr);
-                            vertices->emplace_back(top_left, glm::vec3(0, 0, -1), tl_uv, texture, tint, cotl);
-                            vertices->emplace_back(bottom_left, glm::vec3(0, 0, -1), bl_uv, texture, tint, cobl);
+                            vertices->emplace_back(top_right, tr_uv, texture, tint, cotr);
+                            vertices->emplace_back(top_left, tl_uv, texture, tint, cotl);
+                            vertices->emplace_back(bottom_left, bl_uv, texture, tint, cobl);
                         }
                     }
                 }

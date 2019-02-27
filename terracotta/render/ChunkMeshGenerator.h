@@ -39,14 +39,13 @@ namespace render {
 
 struct Vertex {
     glm::vec3 position;
-    glm::vec3 normal;
     glm::vec2 uv;
     u32 texture_index;
     glm::vec3 tint;
     unsigned char ambient_occlusion;
 
-    Vertex(glm::vec3 pos, glm::vec3 normal, glm::vec2 uv, u32 tex_index, glm::vec3 tint, int ambient_occlusion)
-        : position(pos), normal(normal), uv(uv), texture_index(tex_index), tint(tint), ambient_occlusion(static_cast<unsigned char>(ambient_occlusion))
+    Vertex(glm::vec3 pos, glm::vec2 uv, u32 tex_index, glm::vec3 tint, int ambient_occlusion)
+        : position(pos), uv(uv), texture_index(tex_index), tint(tint), ambient_occlusion(static_cast<unsigned char>(ambient_occlusion))
     {
     }
 };

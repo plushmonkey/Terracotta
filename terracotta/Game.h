@@ -16,6 +16,7 @@ public:
 
     void OnMouseChange(double x, double y);
     void OnMouseScroll(double offset_x, double offset_y);
+    void OnMousePress(int button, int action, int mods);
 
     void Update();
 
