@@ -31,6 +31,7 @@ private:
     Camera m_Camera;
     float m_DeltaTime;
     float m_LastFrame;
+    bool m_Sprinting;
 };
 
 } // ns terra

@@ -336,6 +336,8 @@ GLFWwindow* InitializeWindow() {
     glfwWindowHint(GLFW_SAMPLES, 8);
 
     GLFWwindow* window = glfwCreateWindow(960, 540, "Terracotta", nullptr, nullptr);
+    //GLFWwindow* window = glfwCreateWindow(mode->width, mode->height, "Terracotta", glfwGetPrimaryMonitor(), nullptr);
+
     if (window == nullptr) {
         std::cerr << "Failed to create glfw window.\n";
         return nullptr;

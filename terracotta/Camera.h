@@ -43,6 +43,7 @@ public:
 
     void SetMouseSensitivity(float sensitivity) { m_MouseSensitivity = sensitivity; }
 
+    void SetFov(float fov) { m_Fov = fov; }
 private:
     glm::vec3 m_Position;
     glm::vec3 m_Front;

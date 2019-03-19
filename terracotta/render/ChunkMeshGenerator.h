@@ -14,6 +14,7 @@
 #include "../block/BlockVariant.h"
 #include <mutex>
 #include <thread>
+#include <condition_variable>
 #include <queue>
 
 namespace std {
@@ -118,6 +119,7 @@ private:
     std::mutex m_QueueMutex;
     PriorityQueue<std::shared_ptr<ChunkMeshBuildContext>, ChunkMeshBuildComparator> m_ChunkBuildQueue;
     std::queue<mc::Vector3i> m_ChunkPushQueue;
+    std::condition_variable m_BuildCV;
 
     terra::World* m_World;
 

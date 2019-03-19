@@ -18,7 +18,8 @@ Game::Game(GameWindow& window, const Camera& camera)
     : m_Dispatcher(),
       m_NetworkClient(&m_Dispatcher, mc::protocol::Version::Minecraft_1_13_2), 
       m_Window(window),
-      m_Camera(camera)
+      m_Camera(camera),
+      m_Sprinting(false)
 {
     window.RegisterMouseChange(std::bind(&Game::OnMouseChange, this, std::placeholders::_1, std::placeholders::_2));
     window.RegisterMouseScroll(std::bind(&Game::OnMouseScroll, this, std::placeholders::_1, std::placeholders::_2));
@@ -34,70 +35,76 @@ mc::Vector3d Game::GetPosition() {
     return m_NetworkClient.GetPlayerController()->GetPosition();
 }
 
-
 void Game::Update() {
+    float movement_speed = 4.3f;
+
     float current_frame = (float)glfwGetTime();
+
     m_DeltaTime = current_frame - m_LastFrame;
     m_LastFrame = current_frame;
-    
-    auto controller = m_NetworkClient.GetPlayerController();
-    double speed = 4.3 * 1000;
 
-    auto pos = controller->GetPosition();
+    mc::Vector3d front(
+        std::cos(m_Camera.GetYaw()) * std::cos(0),
+        std::sin(0),
+        std::sin(m_Camera.GetYaw()) * std::cos(0)
+    );
 
-    mc::Vector3d target_pos = pos;
+    mc::Vector3d direction;
 
     if (m_Window.IsKeyDown(GLFW_KEY_W)) {
-        glm::vec3 front = m_Camera.GetFront();
+        direction += front;
 
-        front.y = 0;
-        front = glm::normalize(front);
-
-        target_pos += mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed * m_DeltaTime;
+        if (m_Window.IsKeyDown(GLFW_KEY_LEFT_CONTROL)) {
+            m_Sprinting = true;
+        }
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_S)) {
-        glm::vec3 front = m_Camera.GetFront();
-
-        front.y = 0;
-        front = glm::normalize(front);
-
-        target_pos -= mc::Vector3Normalize(mc::Vector3d(front.x, front.y, front.z)) * speed * m_DeltaTime;
+        direction -= front;
+        m_Sprinting = false;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_A)) {
-        glm::vec3 right = m_Camera.GetRight();
+        mc::Vector3d right = mc::Vector3Normalize(front.Cross(mc::Vector3d(0, 1, 0)));
 
-        right.y = 0;
-        right = glm::normalize(right);
-
-        target_pos -= mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed * m_DeltaTime;
+        direction -= right;
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_D)) {
-        glm::vec3 right = m_Camera.GetRight();
+        mc::Vector3d right = mc::Vector3Normalize(front.Cross(mc::Vector3d(0, 1, 0)));
 
-        right.y = 0;
-        right = glm::normalize(right);
-
-        target_pos += mc::Vector3Normalize(mc::Vector3d(right.x, right.y, right.z)) * speed * m_DeltaTime;
+        direction += right;
     }
 
-    controller->SetMoveSpeed(4.3f);
+    if (m_Sprinting) {
+        if (direction.LengthSq() <= 0.0) {
+            m_Sprinting = false;
+        } else {
+            movement_speed *= 1.3f;
+        }
+        m_Camera.SetFov(glm::radians(90.0f));
+    } else {
+        m_Camera.SetFov(glm::radians(80.0f));
+    }
+
+    auto controller = m_NetworkClient.GetPlayerController();
+
+    mc::Vector3d target_pos = controller->GetPosition() + mc::Vector3Normalize(direction) * movement_speed * m_DeltaTime;
+
+    // TODO: Stop using player controller eventually and move to physics system.
+    controller->SetMoveSpeed(movement_speed);
+    controller->SetYaw(m_Camera.GetYaw() - glm::radians(90.0f));
+    controller->SetPitch(-m_Camera.GetPitch());
     controller->SetTargetPosition(target_pos);
+    // Manually call move so it's updated outside of the PlayerController 20 ticks per second.
+    controller->Move(target_pos - controller->GetPosition());
 
-    float yaw = m_Camera.GetYaw();
-    float pitch = -m_Camera.GetPitch();
-
-    controller->SetYaw(yaw - glm::radians(90.0f));
-    controller->SetPitch(pitch);
-
-    mc::Vector3d position = controller->GetPosition();
-    glm::vec3 eye(position.x, position.y + 1.6, position.z);
-
-    m_Camera.SetPosition(eye);
 
     m_NetworkClient.Update();
+
+    glm::vec3 eye = math::VecToGLM(controller->GetPosition()) + glm::vec3(0, 1.6, 0);
+
+    m_Camera.SetPosition(eye);
 }
 
 void Game::OnMouseChange(double offset_x, double offset_y) {

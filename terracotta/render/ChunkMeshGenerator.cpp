@@ -31,6 +31,8 @@ ChunkMeshGenerator::ChunkMeshGenerator(terra::World* world, const glm::vec3& cam
 ChunkMeshGenerator::~ChunkMeshGenerator() {
     m_Working = false;
 
+    m_BuildCV.notify_all();
+
     for (auto& worker : m_Workers) {
         worker.join();
     }
@@ -83,8 +85,8 @@ void ChunkMeshGenerator::OnChunkLoad(terra::ChunkPtr chunk, const terra::ChunkCo
 void ChunkMeshGenerator::WorkerUpdate() {
     while (m_Working) {
         if (m_ChunkBuildQueue.Empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            continue;
+            std::unique_lock<std::mutex> lock(m_QueueMutex);
+            m_BuildCV.wait(lock);
         }
 
         std::shared_ptr<ChunkMeshBuildContext> ctx;
@@ -134,8 +136,12 @@ void ChunkMeshGenerator::ProcessChunks() {
             }
         }
 
-        std::lock_guard<std::mutex> lock(m_QueueMutex);
-        m_ChunkBuildQueue.Push(ctx);
+        {
+            std::lock_guard<std::mutex> lock(m_QueueMutex);
+            m_ChunkBuildQueue.Push(ctx);
+        }
+
+        m_BuildCV.notify_one();
     }
 
     std::vector<std::unique_ptr<VertexPush>> pushes;
