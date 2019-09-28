@@ -104,7 +104,7 @@ void ChunkMeshGenerator::WorkerUpdate() {
 }
 
 void ChunkMeshGenerator::ProcessChunks() {
-    const std::size_t kMaxMeshesPerFrame = 512;
+    const std::size_t kMaxMeshesPerFrame = 64;
 
     // Push any new chunks that were added this frame into the work queue
     for (std::size_t i = 0; i < kMaxMeshesPerFrame && !m_ChunkPushQueue.empty(); ++i) {
