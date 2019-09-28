@@ -10,7 +10,7 @@ Copy the 1.13.2.jar, bin/blocks.json, bin/shaders, and mclib.dll over to the fol
 It can currently connect to Minecraft servers and attempts to render blocks.
 
 ## Videos
-[Basic rendering](https://gfycat.com/WeepyIncredibleIrishwaterspaniel) - Renders most basic blocks. Entities are rendered with a black box.
+[Basic rendering](https://gfycat.com/dimillinformedharrier) - Renders most basic blocks. Entities are rendered with a black box.
 
 ## Building
 ### Dependencies
