@@ -21,7 +21,9 @@ ChunkMeshGenerator::ChunkMeshGenerator(terra::World* world, const glm::vec3& cam
     world->RegisterListener(this);
 
     m_Working = true;
-    unsigned int count = 3;
+    unsigned int count = std::thread::hardware_concurrency() - 1;
+
+    std::cout << "Creating " << count << " mesh worker threads." << std::endl;
 
     for (unsigned int i = 0; i < count; ++i) {
         m_Workers.emplace_back(&ChunkMeshGenerator::WorkerUpdate, this);
@@ -77,8 +79,6 @@ void ChunkMeshGenerator::OnBlockChange(mc::Vector3i position, mc::block::BlockPt
 }
 
 void ChunkMeshGenerator::OnChunkLoad(terra::ChunkPtr chunk, const terra::ChunkColumnMetadata& meta, u16 index_y) {
-    std::lock_guard<std::mutex> lock(m_QueueMutex);
-
     m_ChunkPushQueue.emplace(meta.x * 16, index_y * 16, meta.z * 16);
 }
 
@@ -104,7 +104,7 @@ void ChunkMeshGenerator::WorkerUpdate() {
 }
 
 void ChunkMeshGenerator::ProcessChunks() {
-    const std::size_t kMaxMeshesPerFrame = 32;
+    const std::size_t kMaxMeshesPerFrame = 512;
 
     // Push any new chunks that were added this frame into the work queue
     for (std::size_t i = 0; i < kMaxMeshesPerFrame && !m_ChunkPushQueue.empty(); ++i) {
@@ -114,21 +114,43 @@ void ChunkMeshGenerator::ProcessChunks() {
         auto ctx = std::make_shared<ChunkMeshBuildContext>();
 
         ctx->world_position = chunk_base;
-        auto chunk_y = chunk_base.y / 16;
+        mc::Vector3i offset_y(0, chunk_base.y, 0);
 
-        terra::ChunkColumnPtr column = m_World->GetChunk(chunk_base);
+        terra::ChunkColumnPtr columns[3][3];
+
+        columns[1][1] = m_World->GetChunk(chunk_base);
 
         // Cache the world data for this chunk so it can be pushed to another thread and built.
-        for (int y = 0; y < 18; ++y) {
-            for (int z = 0; z < 18; ++z) {
-                for (int x = 0; x < 18; ++x) {
+        for (s64 y = 0; y < 18; ++y) {
+            for (s64 z = 0; z < 18; ++z) {
+                for (s64 x = 0; x < 18; ++x) {
                     mc::Vector3i offset(x - 1, y - 1, z - 1);
-                    mc::block::BlockPtr block;
+                    mc::block::BlockPtr block = nullptr;
 
-                    if (column == nullptr || (offset.x < 0 || offset.x > 15 || offset.y < 0 || offset.y > 15 || offset.z < 0 || offset.z > 15)) {
-                        block = m_World->GetBlock(chunk_base + offset);
-                    } else {
-                        block = column->GetBlock(offset + mc::Vector3i(0, chunk_y * 16, 0));
+                    std::size_t x_index = (s64)std::floor(offset.x / 16.0) + 1;
+                    std::size_t z_index = (s64)std::floor(offset.z / 16.0) + 1;
+                    auto& column = columns[x_index][z_index];
+
+                    if (column == nullptr) {
+                        column = m_World->GetChunk(chunk_base + offset);
+                    }
+
+                    if (column != nullptr) {
+                        mc::Vector3i lookup = offset + offset_y;
+
+                        if (lookup.x < 0) {
+                            lookup.x += 16;
+                        } else if (lookup.x > 15) {
+                            lookup.x -= 16;
+                        }
+
+                        if (lookup.z < 0) {
+                            lookup.z += 16;
+                        } else if (lookup.z > 15) {
+                            lookup.z -= 16;
+                        }
+
+                        block = column->GetBlock(lookup);
                     }
 
                     ctx->chunk_data[y * 18 * 18 + z * 18 + x] = block;
@@ -204,9 +226,13 @@ void ChunkMeshGenerator::ProcessChunks() {
 int ChunkMeshGenerator::GetAmbientOcclusion(ChunkMeshBuildContext& context, const mc::Vector3i& side1, const mc::Vector3i& side2, const mc::Vector3i& corner) {
     int value1, value2, value_corner;
 
-    value1 = context.GetBlock(side1)->IsSolid();
-    value2 = context.GetBlock(side2)->IsSolid();
-    value_corner = context.GetBlock(corner)->IsSolid();
+    auto bs1 = context.GetBlock(side1);
+    auto bs2 = context.GetBlock(side2);
+    auto bsc = context.GetBlock(corner);
+
+    value1 = bs1 && bs1->IsSolid();
+    value2 = bs2 && bs2->IsSolid();
+    value_corner = bsc && bsc->IsSolid();
 
     if (value1 && value2) {
         return 0;
@@ -216,6 +242,7 @@ int ChunkMeshGenerator::GetAmbientOcclusion(ChunkMeshBuildContext& context, cons
 }
 
 bool ChunkMeshGenerator::IsOccluding(terra::block::BlockVariant* from_variant, terra::block::BlockFace face, mc::block::BlockPtr test_block) {
+    if (test_block == nullptr) return true;
     if (from_variant->HasRotation()) return false;
 
     for (auto& element : from_variant->GetModel()->GetElements()) {
@@ -235,13 +262,14 @@ bool ChunkMeshGenerator::IsOccluding(terra::block::BlockVariant* from_variant, t
     bool is_full = false;
 
     block::BlockFace opposite = block::get_opposite_face(face);
+    auto& textures = g_AssetCache->GetTextures();
     for (auto& element : model->GetElements()) {
-        if (element.GetFrom() == glm::vec3(0, 0, 0) && element.GetTo() == glm::vec3(1, 1, 1)) {
-            is_full = true;
-        }
+        auto opposite_face = element.GetFace(opposite);
+        bool transparent = textures.IsTransparent(opposite_face.texture);
+        bool full_extent = element.IsFullExtent();
 
-        if (g_AssetCache->GetTextures().IsTransparent(element.GetFace(opposite).texture)) {
-            return false;
+        if (full_extent && !transparent) {
+            is_full = true;
         }
     }
     
@@ -308,6 +336,8 @@ void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& 
 void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
     std::unique_ptr<std::vector<Vertex>> vertices = std::make_unique<std::vector<Vertex>>();
 
+    vertices->reserve(12500);
+
     static const glm::vec3 kTints[] = {
         glm::vec3(1.0, 1.0, 1.0),
         glm::vec3(137 / 255.0, 191 / 255.0, 98 / 255.0), // Grass
@@ -319,7 +349,9 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
         for (int z = 0; z < 16; ++z) {
             for (int x = 0; x < 16; ++x) {
                 mc::Vector3i mc_pos = context.world_position + mc::Vector3i(x, y, z);
+
                 mc::block::BlockPtr block = context.GetBlock(mc_pos);
+                if (block == nullptr) continue;
 
                 terra::block::BlockVariant* variant = g_AssetCache->GetVariant(block);
                 if (variant == nullptr) continue;

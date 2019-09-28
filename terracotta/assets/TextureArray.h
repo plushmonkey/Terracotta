@@ -19,7 +19,7 @@ public:
     TextureHandle Append(const std::string& filename, const std::string& texture);
 
     bool GetTexture(const std::string& filename, TextureHandle* handle);
-    bool IsTransparent(TextureHandle handle);
+    bool IsTransparent(TextureHandle handle) const;
 
     void Generate();
     void Bind();
@@ -28,7 +28,8 @@ private:
 
     std::vector<unsigned char> m_TextureData;
     std::unordered_map<std::string, TextureHandle> m_Textures;
-    std::unordered_map<TextureHandle, bool> m_Transparency;
+
+    bool m_Transparency[2048];
 };
 
 } // ns assets

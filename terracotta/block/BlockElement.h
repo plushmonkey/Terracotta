@@ -31,12 +31,14 @@ struct ElementRotation {
 
 class BlockElement {
 public:
-    BlockElement(glm::vec3 from, glm::vec3 to) : m_From(from), m_To(to) {
+    BlockElement(glm::vec3 from, glm::vec3 to) : m_From(from), m_To(to), m_Shade(true) {
         m_Faces.resize(6);
 
         for (RenderableFace& renderable : m_Faces) {
             renderable.face = BlockFace::None;
         }
+
+        m_FullExtent = m_From == glm::vec3(0, 0, 0) && m_To == glm::vec3(1, 1, 1);
     }
 
     std::vector<RenderableFace>& GetFaces() { return m_Faces; }
@@ -46,6 +48,7 @@ public:
 
     const glm::vec3& GetFrom() const { return m_From; }
     const glm::vec3& GetTo() const { return m_To; }
+    bool IsFullExtent() const { return m_FullExtent; }
 
     void SetShouldShade(bool shade) { m_Shade = shade; }
     bool ShouldShade() const { return m_Shade; }
@@ -57,6 +60,7 @@ private:
     std::vector<RenderableFace> m_Faces;
     glm::vec3 m_From;
     glm::vec3 m_To;
+    bool m_FullExtent;
     bool m_Shade;
     ElementRotation m_Rotation;
 };

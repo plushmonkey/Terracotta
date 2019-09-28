@@ -1,8 +1,8 @@
 #ifndef TERRACOTTA_RENDER_CHUNKMESH_H_
 #define TERRACOTTA_RENDER_CHUNKMESH_H_
 
-#include <cstddef>
 #include "Shader.h"
+#include <cstddef>
 
 namespace terra {
 namespace render {

@@ -15,7 +15,7 @@ Plane::Plane(glm::vec3 p1, glm::vec3 p2, glm::vec3 p3) {
     m_Distance = glm::dot(m_Normal, p1);
 }
 
-float Plane::PointDistance(glm::vec3 q) const {
+float Plane::PointDistance(const glm::vec3& q) const {
     return (glm::dot(m_Normal, q) - m_Distance) / glm::dot(m_Normal, m_Normal);
 }
 

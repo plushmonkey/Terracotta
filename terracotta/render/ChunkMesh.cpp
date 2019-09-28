@@ -20,17 +20,19 @@ ChunkMesh::ChunkMesh(unsigned int vao, unsigned int vbo, GLsizei vertex_count)
 ChunkMesh::ChunkMesh(const ChunkMesh& other) {
     this->m_VAO = other.m_VAO;
     this->m_VBO = other.m_VBO;
+    this->m_VertexCount = other.m_VertexCount;
 }
 
 ChunkMesh& ChunkMesh::operator=(const ChunkMesh& other) {
     this->m_VAO = other.m_VAO;
     this->m_VBO = other.m_VBO;
+    this->m_VertexCount = other.m_VertexCount;
 
     return *this;
 }
 
 void ChunkMesh::Render(unsigned int model_uniform) {
-    glm::mat4 modelMatrix(1.0);
+    static const glm::mat4 modelMatrix(1.0);
 
     glBindVertexArray(m_VAO);
     g_AssetCache->GetTextures().Bind();

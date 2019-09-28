@@ -162,12 +162,12 @@ bool AssetLoader::LoadTexture(terra::assets::ZipArchive& archive, const std::str
     std::string texture_path = "assets/minecraft/textures/" + path;
 
     int width, height, channels;
-    int texture_size;
-    char* texture_raw = archive.ReadFile(texture_path.c_str(), reinterpret_cast<std::size_t*>(&texture_size));
+    std::size_t texture_size;
+    char* texture_raw = archive.ReadFile(texture_path.c_str(), &texture_size);
 
     if (texture_raw == nullptr) return false;
 
-    unsigned char* image = stbi_load_from_memory(reinterpret_cast<unsigned char*>(texture_raw), texture_size, &width, &height, &channels, STBI_rgb_alpha);
+    unsigned char* image = stbi_load_from_memory(reinterpret_cast<unsigned char*>(texture_raw), (int)texture_size, &width, &height, &channels, STBI_rgb_alpha);
 
     archive.FreeFileData(texture_raw);
 

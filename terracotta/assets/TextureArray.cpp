@@ -9,6 +9,8 @@ TextureArray::TextureArray() {
     glActiveTexture(GL_TEXTURE0);
     glGenTextures(1, &m_TextureId);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_TextureId);
+
+    memset(m_Transparency, 0, sizeof(m_Transparency));
 }
 
 TextureHandle TextureArray::Append(const std::string& filename, const std::string& texture) {
@@ -18,7 +20,7 @@ TextureHandle TextureArray::Append(const std::string& filename, const std::strin
         return iter->second;
     }
 
-    TextureHandle handle = m_Textures.size();
+    TextureHandle handle = static_cast<TextureHandle>(m_Textures.size());
     
     m_Textures[filename] = handle;
     m_TextureData.insert(m_TextureData.end(), texture.c_str(), texture.c_str() + texture.size());
@@ -41,14 +43,16 @@ void TextureArray::Generate() {
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_BASE_LEVEL, 0);
     glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_LEVEL, 4);
 
-    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_RGBA8, 16, 16, m_Textures.size());
-    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, 16, 16, m_Textures.size(), GL_RGBA, GL_UNSIGNED_BYTE, &m_TextureData[0]);
+    GLsizei size = static_cast<GLuint>(m_Textures.size());
+
+    glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_RGBA8, 16, 16, size);
+    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, 0, 16, 16, size, GL_RGBA, GL_UNSIGNED_BYTE, &m_TextureData[0]);
 
     glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 
@@ -71,14 +75,8 @@ bool TextureArray::GetTexture(const std::string& filename, TextureHandle* handle
     return true;
 }
 
-bool TextureArray::IsTransparent(TextureHandle handle) {
-    auto iter = m_Transparency.find(handle);
-
-    if (iter == m_Transparency.end()) {
-        return false;
-    }
-
-    return iter->second;
+bool TextureArray::IsTransparent(TextureHandle handle) const {
+    return m_Transparency[handle];
 }
 
 } // ns assets
