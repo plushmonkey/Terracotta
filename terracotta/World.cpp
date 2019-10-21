@@ -72,8 +72,21 @@ void World::HandlePacket(mc::protocol::packets::in::ChunkDataPacket* packet) {
         return;
     }
 
-    if (!m_Chunks[key])
+    auto iter = m_Chunks.find(key);
+
+    if (!meta.continuous) {
+        // This isn't an entire column of chunks, so just update the existing chunk column with the provided chunks.
+        for (s16 i = 0; i < ChunkColumn::ChunksPerColumn; ++i) {
+            // The section mask says whether or not there is data in this chunk.
+            if (meta.sectionmask & (1 << i)) {
+                (*iter->second)[i] = (*col)[i];
+            }
+        }
+    } else {
+        // This is an entire column of chunks, so just replace the entire column with the new one.
         m_Chunks[key] = col;
+    }
+
 
     for (s32 i = 0; i < ChunkColumn::ChunksPerColumn; ++i) {
         ChunkPtr chunk = (*col)[i];
@@ -85,7 +98,8 @@ void World::HandlePacket(mc::protocol::packets::in::ChunkDataPacket* packet) {
 void World::HandlePacket(mc::protocol::packets::in::MultiBlockChangePacket* packet) {
     mc::Vector3i chunkStart(packet->GetChunkX() * 16, 0, packet->GetChunkZ() * 16);
     auto iter = m_Chunks.find(ChunkCoord(packet->GetChunkX(), packet->GetChunkZ()));
-    if (iter == m_Chunks.end()) return;
+    if (iter == m_Chunks.end()) 
+        return;
 
     ChunkColumnPtr chunk = iter->second;
     if (!chunk)
@@ -94,8 +108,6 @@ void World::HandlePacket(mc::protocol::packets::in::MultiBlockChangePacket* pack
     const auto& changes = packet->GetBlockChanges();
     for (const auto& change : changes) {
         mc::Vector3i relative(change.x, change.y, change.z);
-
-        chunk->RemoveBlockEntity(chunkStart + relative);
 
         std::size_t index = change.y / 16;
         mc::block::BlockPtr oldBlock = mc::block::BlockRegistry::GetInstance()->GetBlock(0);
@@ -112,8 +124,11 @@ void World::HandlePacket(mc::protocol::packets::in::MultiBlockChangePacket* pack
         mc::Vector3i blockChangePos = chunkStart + relative;
 
         relative.y %= 16;
-        (*chunk)[index]->SetBlock(relative, newBlock);
-        NotifyListeners(&WorldListener::OnBlockChange, blockChangePos, newBlock, oldBlock);
+        if (newBlock->GetType() != oldBlock->GetType()) {
+            chunk->RemoveBlockEntity(chunkStart + relative);
+            (*chunk)[index]->SetBlock(relative, newBlock);
+            NotifyListeners(&WorldListener::OnBlockChange, blockChangePos, newBlock, oldBlock);
+        }
     }
 }
 
@@ -151,7 +166,8 @@ void World::HandlePacket(mc::protocol::packets::in::UnloadChunkPacket* packet) {
 
     auto iter = m_Chunks.find(coord);
 
-    if (iter == m_Chunks.end()) return;
+    if (iter == m_Chunks.end()) 
+        return;
 
     ChunkColumnPtr chunk = iter->second;
     NotifyListeners(&WorldListener::OnChunkUnload, chunk);

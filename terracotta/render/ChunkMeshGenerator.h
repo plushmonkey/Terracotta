@@ -15,7 +15,7 @@
 #include <mutex>
 #include <thread>
 #include <condition_variable>
-#include <queue>
+#include <deque>
 
 namespace std {
 template <> struct hash<mc::Vector3i> {
@@ -115,10 +115,11 @@ private:
     int GetAmbientOcclusion(ChunkMeshBuildContext& context, const mc::Vector3i& side1, const mc::Vector3i& side2, const mc::Vector3i& corner);
     bool IsOccluding(terra::block::BlockVariant* from_variant, terra::block::BlockFace face, mc::block::BlockPtr test_block);
     void WorkerUpdate();
+    void EnqueueBuildWork(long chunk_x, int chunk_y, long chunk_z);
 
     std::mutex m_QueueMutex;
     PriorityQueue<std::shared_ptr<ChunkMeshBuildContext>, ChunkMeshBuildComparator> m_ChunkBuildQueue;
-    std::queue<mc::Vector3i> m_ChunkPushQueue;
+    std::deque<mc::Vector3i> m_ChunkPushQueue;
     std::condition_variable m_BuildCV;
 
     terra::World* m_World;

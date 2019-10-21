@@ -57,29 +57,46 @@ void ChunkMeshGenerator::OnBlockChange(mc::Vector3i position, mc::block::BlockPt
     }
 
     // TODO: Incremental update somehow?
-    GenerateMesh(chunk_x, chunk_y, chunk_z);
+    EnqueueBuildWork(chunk_x, chunk_y, chunk_z);
 
     if (position.x % 16 == 0) {
-        GenerateMesh(chunk_x - 1, chunk_y, chunk_z);
+        EnqueueBuildWork(chunk_x - 1, chunk_y, chunk_z);
     } else if (position.x % 16 == 15) {
-        GenerateMesh(chunk_x + 1, chunk_y, chunk_z);
+        EnqueueBuildWork(chunk_x + 1, chunk_y, chunk_z);
     }
 
     if (position.y % 16 == 0) {
-        GenerateMesh(chunk_x, chunk_y - 1, chunk_z);
+        EnqueueBuildWork(chunk_x, chunk_y - 1, chunk_z);
     } else if (position.y % 16 == 15) {
-        GenerateMesh(chunk_x, chunk_y + 1, chunk_z);
+        EnqueueBuildWork(chunk_x, chunk_y + 1, chunk_z);
     }
 
     if (position.z % 16 == 0) {
-        GenerateMesh(chunk_x, chunk_y, chunk_z - 1);
+        EnqueueBuildWork(chunk_x, chunk_y, chunk_z - 1);
     } else if (position.z % 16 == 15) {
-        GenerateMesh(chunk_x, chunk_y, chunk_z + 1);
+        EnqueueBuildWork(chunk_x, chunk_y, chunk_z);
     }
 }
 
 void ChunkMeshGenerator::OnChunkLoad(terra::ChunkPtr chunk, const terra::ChunkColumnMetadata& meta, u16 index_y) {
-    m_ChunkPushQueue.emplace(meta.x * 16, index_y * 16, meta.z * 16);
+    EnqueueBuildWork(meta.x, index_y, meta.z);
+
+    EnqueueBuildWork(meta.x - 1, index_y, meta.z);
+    EnqueueBuildWork(meta.x + 1, index_y, meta.z);
+    EnqueueBuildWork(meta.x, index_y - 1, meta.z);
+    EnqueueBuildWork(meta.x, index_y + 1, meta.z);
+    EnqueueBuildWork(meta.x, index_y, meta.z - 1);
+    EnqueueBuildWork(meta.x, index_y, meta.z + 1);
+}
+
+void ChunkMeshGenerator::EnqueueBuildWork(long chunk_x, int chunk_y, long chunk_z) {
+    mc::Vector3i position(chunk_x * 16, chunk_y * 16, chunk_z * 16);
+
+    auto iter = std::find(m_ChunkPushQueue.begin(), m_ChunkPushQueue.end(), position);
+
+    if (iter == m_ChunkPushQueue.end()) {
+        m_ChunkPushQueue.push_back(position);
+    }
 }
 
 void ChunkMeshGenerator::WorkerUpdate() {
@@ -109,7 +126,7 @@ void ChunkMeshGenerator::ProcessChunks() {
     // Push any new chunks that were added this frame into the work queue
     for (std::size_t i = 0; i < kMaxMeshesPerFrame && !m_ChunkPushQueue.empty(); ++i) {
         mc::Vector3i chunk_base = m_ChunkPushQueue.front();
-        m_ChunkPushQueue.pop();
+        m_ChunkPushQueue.pop_front();
 
         auto ctx = std::make_shared<ChunkMeshBuildContext>();
 
@@ -178,6 +195,8 @@ void ChunkMeshGenerator::ProcessChunks() {
         DestroyChunk(push->pos.x / 16, push->pos.y / 16, push->pos.z / 16);
 
         auto&& vertices = push->vertices;
+
+        if (vertices->empty()) continue;
 
         GLuint vao = 0;
 
@@ -325,6 +344,10 @@ void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& 
         quat = glm::rotate(quat, kToRads * variant_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
     }
     
+    if (rotation.rescale) {
+        rotations = rotations * (1.0f / std::cosf(3.14159f / 4.0f) - 1.0f);
+    }
+
     // Hadamard product to get just the one axis rotation
     rotations = rotations * (quat * rotation.axis);
 
@@ -704,8 +727,6 @@ void ChunkMeshGenerator::GenerateMesh(ChunkMeshBuildContext& context) {
             }
         }
     }
-
-    if (vertices->empty()) return;
 
     std::unique_ptr<VertexPush> push = std::make_unique<VertexPush>(context.world_position, std::move(vertices));
 
