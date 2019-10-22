@@ -14,12 +14,68 @@
 
 namespace terra {
 
-Game::Game(GameWindow& window, const Camera& camera) 
-    : m_Dispatcher(),
-      m_NetworkClient(&m_Dispatcher, mc::protocol::Version::Minecraft_1_13_2), 
+#ifndef M_TAU
+#define M_TAU 3.14159 * 2
+#endif
+
+float clamp(float value, float min, float max) {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}
+
+Player::Player(terra::World* world) : m_CollisionDetector(world), m_OnGround(false) {
+    m_Transform.bounding_box = mc::AABB(mc::Vector3d(-0.3, 0, -0.3), mc::Vector3d(0.3, 1.8, 0.3));
+    m_Transform.max_speed = 4.3f;
+}
+
+bool Player::OnGround() {
+    return m_OnGround;
+}
+
+void Player::Update(float dt) {
+    const float kMaxAcceleration = 100.0f;
+    const double kEpsilon = 0.0001;
+
+    using vec3 = mc::Vector3d;
+
+    vec3 horizontal_acceleration = m_Transform.acceleration;
+    horizontal_acceleration.y = 0;
+
+    horizontal_acceleration.Truncate(kMaxAcceleration);
+
+    vec3 acceleration(horizontal_acceleration.x, -38 + m_Transform.acceleration.y, horizontal_acceleration.z);
+
+    m_OnGround = false;
+
+    m_CollisionDetector.ResolveCollisions(&m_Transform, dt, &m_OnGround);
+
+    m_Transform.velocity += acceleration * dt;
+    m_Transform.orientation += m_Transform.rotation * dt;
+
+    if (m_Transform.velocity.LengthSq() < kEpsilon) m_Transform.velocity = vec3(0, 0, 0);
+
+    float drag = 0.98 - (int)m_OnGround * 0.13;
+    m_Transform.velocity *= drag;
+    m_Transform.orientation = clamp(m_Transform.orientation, -M_TAU, M_TAU);
+
+    vec3 horizontal_velocity = m_Transform.velocity;
+    horizontal_velocity.y = 0;
+
+    horizontal_velocity.Truncate(m_Transform.max_speed);
+    m_Transform.velocity = horizontal_velocity + vec3(0, m_Transform.velocity.y, 0);
+
+    m_Transform.acceleration = vec3();
+    m_Transform.rotation = 0.0f;
+}
+
+Game::Game(mc::protocol::packets::PacketDispatcher* dispatcher, GameWindow& window, const Camera& camera)
+    : mc::protocol::packets::PacketHandler(dispatcher),
+      m_NetworkClient(dispatcher, mc::protocol::Version::Minecraft_1_13_2),
       m_Window(window),
       m_Camera(camera),
-      m_Sprinting(false)
+      m_Sprinting(false),
+      m_LastPositionTime(0)
 {
     window.RegisterMouseChange(std::bind(&Game::OnMouseChange, this, std::placeholders::_1, std::placeholders::_2));
     window.RegisterMouseScroll(std::bind(&Game::OnMouseScroll, this, std::placeholders::_1, std::placeholders::_2));
@@ -29,16 +85,30 @@ Game::Game(GameWindow& window, const Camera& camera)
     m_NetworkClient.GetConnection()->GetSettings()
         .SetMainHand(mc::MainHand::Right)
         .SetViewDistance(4);
+
+    m_NetworkClient.GetPlayerManager()->RegisterListener(this);
+
+    dispatcher->RegisterHandler(mc::protocol::State::Play, mc::protocol::play::UpdateHealth, this);
+    dispatcher->RegisterHandler(mc::protocol::State::Play, mc::protocol::play::EntityVelocity, this);
+    dispatcher->RegisterHandler(mc::protocol::State::Play, mc::protocol::play::SpawnPosition, this);
+}
+
+void Game::CreatePlayer(terra::World* world) {
+    m_Player = std::make_unique<terra::Player>(world);
 }
 
 mc::Vector3d Game::GetPosition() {
-    return m_NetworkClient.GetPlayerController()->GetPosition();
+    return m_Player->GetTransform().position;
 }
 
 void Game::Update() {
-    float movement_speed = 4.3f;
+    UpdateClient();
 
     float current_frame = (float)glfwGetTime();
+
+    if (current_frame - m_LastFrame < 1.0f / 60.0f) {
+        return;
+    }
 
     m_DeltaTime = current_frame - m_LastFrame;
     m_LastFrame = current_frame;
@@ -76,35 +146,54 @@ void Game::Update() {
         direction += right;
     }
 
+    if (!m_Player->OnGround()) {
+        direction *= 0.2;
+    }
+
     if (m_Sprinting) {
         if (direction.LengthSq() <= 0.0) {
             m_Sprinting = false;
         } else {
-            movement_speed *= 1.3f;
+            direction *= 1.3f;
         }
         m_Camera.SetFov(glm::radians(90.0f));
     } else {
         m_Camera.SetFov(glm::radians(80.0f));
     }
 
-    auto controller = m_NetworkClient.GetPlayerController();
+    if (m_Window.IsKeyDown(GLFW_KEY_SPACE) && m_Player->OnGround()) {
+        m_Player->GetTransform().acceleration += mc::Vector3d(0, 6 / m_DeltaTime, 0);
+    }
 
-    mc::Vector3d target_pos = controller->GetPosition() + mc::Vector3Normalize(direction) * movement_speed * m_DeltaTime;
+    m_Player->GetTransform().max_speed = 4.3f + (int)m_Sprinting * 1.3f;
+    m_Player->GetTransform().acceleration += direction * 85.0f;
 
-    // TODO: Stop using player controller eventually and move to physics system.
-    controller->SetMoveSpeed(movement_speed);
-    controller->SetYaw(m_Camera.GetYaw() - glm::radians(90.0f));
-    controller->SetPitch(-m_Camera.GetPitch());
-    controller->SetTargetPosition(target_pos);
-    // Manually call move so it's updated outside of the PlayerController 20 ticks per second.
-    controller->Move(target_pos - controller->GetPosition());
+    m_Player->Update(m_DeltaTime);
 
-
-    m_NetworkClient.Update();
-
-    glm::vec3 eye = math::VecToGLM(controller->GetPosition()) + glm::vec3(0, 1.6, 0);
+    glm::vec3 eye = math::VecToGLM(m_Player->GetTransform().position) + glm::vec3(0, 1.6, 0);
 
     m_Camera.SetPosition(eye);
+
+    constexpr float kTickTime = 1000.0f / 20.0f / 1000.0f;
+
+    if (current_frame > m_LastPositionTime + kTickTime && m_NetworkClient.GetConnection()->GetProtocolState() == mc::protocol::State::Play) {
+        float yaw = m_Camera.GetYaw() - glm::radians(90.0f);
+        float pitch = -m_Camera.GetPitch();
+
+        mc::protocol::packets::out::PlayerPositionAndLookPacket response(m_Player->GetTransform().position, yaw * 180.0f / 3.14159f, pitch * 180.0f / 3.14159f, m_Player->OnGround());
+
+        m_NetworkClient.GetConnection()->SendPacket(&response);
+
+        m_LastPositionTime = current_frame;
+    }
+}
+
+void Game::UpdateClient() {
+    try {
+        m_NetworkClient.GetConnection()->CreatePacket();
+    } catch (std::exception& e) {
+        std::wcout << e.what() << std::endl;
+    }
 }
 
 void Game::OnMouseChange(double offset_x, double offset_y) {
@@ -113,6 +202,34 @@ void Game::OnMouseChange(double offset_x, double offset_y) {
 
 void Game::OnMouseScroll(double offset_x, double offset_y) {
     m_Camera.ProcessZoom((float)offset_y);
+}
+
+void Game::OnClientSpawn(mc::core::PlayerPtr player) {
+    m_Player->GetTransform().position = player->GetEntity()->GetPosition();
+    m_Player->GetTransform().velocity = mc::Vector3d();
+    m_Player->GetTransform().acceleration = mc::Vector3d();
+    m_Player->GetTransform().orientation = player->GetEntity()->GetYaw() * 3.14159f / 180.0f;
+}
+
+void Game::HandlePacket(mc::protocol::packets::in::UpdateHealthPacket* packet) {
+
+}
+
+void Game::HandlePacket(mc::protocol::packets::in::EntityVelocityPacket* packet) {
+    mc::EntityId eid = packet->GetEntityId();
+
+    auto playerEntity = m_NetworkClient.GetEntityManager()->GetPlayerEntity();
+    if (playerEntity && playerEntity->GetEntityId() == eid) {
+        mc::Vector3d newVelocity = ToVector3d(packet->GetVelocity()) * 20.0 / 8000.0;
+
+        m_Player->GetTransform().velocity = newVelocity;
+    }
+}
+
+void Game::HandlePacket(mc::protocol::packets::in::SpawnPositionPacket* packet) {
+    s64 x = packet->GetLocation().GetX();
+    s64 y = packet->GetLocation().GetY();
+    s64 z = packet->GetLocation().GetZ();
 }
 
 // TODO: Temporary fun code

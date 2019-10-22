@@ -133,8 +133,9 @@ int main(int argc, char* argvp[]) {
 
     float view_distance = 16.0f * 16.0f;
 
+    mc::protocol::packets::PacketDispatcher dispatcher;
     terra::Camera camera(glm::vec3(0.0f, 0.0f, 9.0f), fov, aspect_ratio, 0.1f, view_distance);
-    terra::Game game(*g_GameWindow, camera);
+    terra::Game game(&dispatcher, *g_GameWindow, camera);
 
     try {
         std::cout << "Logging in." << std::endl;
@@ -152,6 +153,8 @@ int main(int argc, char* argvp[]) {
     auto mesh_gen = std::make_shared<terra::render::ChunkMeshGenerator>(&world, camera.GetPosition());
 
     terra::ChatWindow chat(game.GetNetworkClient().GetDispatcher(), game.GetNetworkClient().GetConnection());
+
+    game.CreatePlayer(&world);
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
