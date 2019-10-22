@@ -1,6 +1,8 @@
 #include "TextureArray.h"
 
 #include <GL/glew.h>
+#include <cmath>
+#include <cstring>
 
 namespace terra {
 namespace assets {
@@ -22,12 +24,12 @@ float GetColorGamma(int a, int b, int c, int d) {
     float cn = c / 255.0f;
     float dn = d / 255.0f;
 
-    return (std::powf(an, 2.2f) + std::powf(bn, 2.2f) + std::powf(cn, 2.2f) + std::powf(dn, 2.2f)) / 4.0f;
+    return (std::pow(an, 2.2f) + std::pow(bn, 2.2f) + std::pow(cn, 2.2f) + std::pow(dn, 2.2f)) / 4.0f;
 }
 
 // Blend four samples into a final result after doing gamma conversions
 int GammaBlend(int a, int b, int c, int d) {
-    float result = std::powf(GetColorGamma(a, b, c, d), 1.0f / 2.2f);
+    float result = std::pow(GetColorGamma(a, b, c, d), 1.0f / 2.2f);
 
     return static_cast<int>(255.0f * result);
 }

@@ -32,7 +32,7 @@ void ChatWindow::Render() {
     ImGui::Begin("chat", 0, flags);
 
     for (auto&& str : m_ChatBuffer) {
-        ImGui::TextWrapped(str.c_str());
+        ImGui::TextWrapped("%s", str.c_str());
     }
 
     ImGui::SetScrollHereY(1.0f);
