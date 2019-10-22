@@ -26,10 +26,13 @@ public:
     Transform& GetTransform() noexcept { return m_Transform; }
 
     bool OnGround();
+    bool IsSneaking() const { return m_Sneaking; }
+    void SetSneaking(bool sneaking) { m_Sneaking = sneaking; }
 
     CollisionDetector& GetCollisionDetector() { return m_CollisionDetector; }
 private:
     bool m_OnGround;
+    bool m_Sneaking;
     Transform m_Transform;
     CollisionDetector m_CollisionDetector;
 };

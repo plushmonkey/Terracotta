@@ -24,9 +24,9 @@ float clamp(float value, float min, float max) {
     return value;
 }
 
-Player::Player(terra::World* world) : m_CollisionDetector(world), m_OnGround(false) {
+Player::Player(terra::World* world) : m_CollisionDetector(world), m_OnGround(false), m_Sneaking(false), m_Transform({}) {
     m_Transform.bounding_box = mc::AABB(mc::Vector3d(-0.3, 0, -0.3), mc::Vector3d(0.3, 1.8, 0.3));
-    m_Transform.max_speed = 4.3f;
+    m_Transform.max_speed = 14.3f;
 }
 
 bool Player::OnGround() {
@@ -51,21 +51,26 @@ void Player::Update(float dt) {
     m_CollisionDetector.ResolveCollisions(&m_Transform, dt, &m_OnGround);
 
     m_Transform.velocity += acceleration * dt;
+    m_Transform.input_velocity += m_Transform.input_acceleration * dt;
     m_Transform.orientation += m_Transform.rotation * dt;
 
     if (m_Transform.velocity.LengthSq() < kEpsilon) m_Transform.velocity = vec3(0, 0, 0);
+    if (m_Transform.input_velocity.LengthSq() < kEpsilon) m_Transform.input_velocity = vec3(0, 0, 0);
 
     float drag = 0.98 - (int)m_OnGround * 0.13;
     m_Transform.velocity *= drag;
+    m_Transform.input_velocity *= drag;
+
     m_Transform.orientation = clamp(m_Transform.orientation, -M_TAU, M_TAU);
 
-    vec3 horizontal_velocity = m_Transform.velocity;
+    vec3 horizontal_velocity = m_Transform.input_velocity;
     horizontal_velocity.y = 0;
-
     horizontal_velocity.Truncate(m_Transform.max_speed);
-    m_Transform.velocity = horizontal_velocity + vec3(0, m_Transform.velocity.y, 0);
+    
+    m_Transform.input_velocity = horizontal_velocity + vec3(0, m_Transform.input_velocity.y, 0);
 
     m_Transform.acceleration = vec3();
+    m_Transform.input_acceleration = vec3();
     m_Transform.rotation = 0.0f;
 }
 
@@ -162,11 +167,11 @@ void Game::Update() {
     }
 
     if (m_Window.IsKeyDown(GLFW_KEY_SPACE) && m_Player->OnGround()) {
-        m_Player->GetTransform().acceleration += mc::Vector3d(0, 6 / m_DeltaTime, 0);
+        m_Player->GetTransform().input_acceleration += mc::Vector3d(0, 6 / m_DeltaTime, 0);
     }
 
     m_Player->GetTransform().max_speed = 4.3f + (int)m_Sprinting * 1.3f;
-    m_Player->GetTransform().acceleration += direction * 85.0f;
+    m_Player->GetTransform().input_acceleration += direction * 85.0f;
 
     m_Player->Update(m_DeltaTime);
 
@@ -185,6 +190,20 @@ void Game::Update() {
         m_NetworkClient.GetConnection()->SendPacket(&response);
 
         m_LastPositionTime = current_frame;
+
+        if (m_Player->IsSneaking() && !m_Window.IsKeyDown(GLFW_KEY_LEFT_SHIFT)) {
+            mc::protocol::packets::out::EntityActionPacket packet(0, mc::protocol::packets::out::EntityActionPacket::Action::StopSneak);
+
+            m_NetworkClient.GetConnection()->SendPacket(&packet);
+
+            m_Player->SetSneaking(false);
+        } else if (!m_Player->IsSneaking() && m_Window.IsKeyDown(GLFW_KEY_LEFT_SHIFT)) {
+            mc::protocol::packets::out::EntityActionPacket packet(0, mc::protocol::packets::out::EntityActionPacket::Action::StartSneak);
+
+            m_NetworkClient.GetConnection()->SendPacket(&packet);
+
+            m_Player->SetSneaking(true);
+        }
     }
 }
 
@@ -222,6 +241,7 @@ void Game::HandlePacket(mc::protocol::packets::in::EntityVelocityPacket* packet)
     if (playerEntity && playerEntity->GetEntityId() == eid) {
         mc::Vector3d newVelocity = ToVector3d(packet->GetVelocity()) * 20.0 / 8000.0;
 
+        std::cout << "Applying new velocity " << newVelocity << std::endl;
         m_Player->GetTransform().velocity = newVelocity;
     }
 }
@@ -338,6 +358,8 @@ bool RayCast(mc::world::World& world, mc::Vector3d from, mc::Vector3d direction,
 // TODO: Temporary fun code
 void Game::OnMousePress(int button, int action, int mods) {
     if (button == GLFW_MOUSE_BUTTON_1 && action == GLFW_PRESS) {
+        using namespace mc::protocol::packets::out;
+
         auto& world = *m_NetworkClient.GetWorld();
         mc::Vector3d position(m_Camera.GetPosition().x, m_Camera.GetPosition().y, m_Camera.GetPosition().z);
         mc::Vector3d forward(m_Camera.GetFront().x, m_Camera.GetFront().y, m_Camera.GetFront().z);
@@ -346,7 +368,6 @@ void Game::OnMousePress(int button, int action, int mods) {
         mc::Face face;
 
         if (RayCast(world, position, forward, 5.0, hit, normal, face)) {
-            using namespace mc::protocol::packets::out;
 
             {
                 PlayerDiggingPacket::Status status = PlayerDiggingPacket::Status::StartedDigging;
@@ -362,6 +383,10 @@ void Game::OnMousePress(int button, int action, int mods) {
                 m_NetworkClient.GetConnection()->SendPacket(&packet);
             }
         }
+
+        AnimationPacket animation;
+        m_NetworkClient.GetConnection()->SendPacket(&animation);
+        
     } else if (button == GLFW_MOUSE_BUTTON_2 && action == GLFW_PRESS) {
         auto& world = *m_NetworkClient.GetWorld();
         mc::Vector3d position(m_Camera.GetPosition().x, m_Camera.GetPosition().y, m_Camera.GetPosition().z);

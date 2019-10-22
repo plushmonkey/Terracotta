@@ -11,7 +11,9 @@ namespace terra {
 struct Transform {
     mc::Vector3d position;
     mc::Vector3d velocity;
+    mc::Vector3d input_velocity;
     mc::Vector3d acceleration;
+    mc::Vector3d input_acceleration;
     float max_speed;
     float orientation;
     float rotation;

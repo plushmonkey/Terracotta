@@ -104,6 +104,7 @@ void CollisionDetector::ResolveCollisions(Transform* transform, double dt, bool*
     bool collisions = true;
 
     Vector3d velocity = transform->velocity;
+    Vector3d input_velocity = transform->input_velocity;
 
     for (s32 iteration = 0; iteration < MaxIterations && collisions; ++iteration) {
         Vector3d position = transform->position;
@@ -114,7 +115,7 @@ void CollisionDetector::ResolveCollisions(Transform* transform, double dt, bool*
             AABB playerBounds = transform->bounding_box;
 
             if (iteration == 0)
-                position[i] += velocity[i] * dt;
+                position[i] += velocity[i] * dt + input_velocity[i] * dt;
 
             playerBounds.min += position;
             playerBounds.max += position;
@@ -133,6 +134,7 @@ void CollisionDetector::ResolveCollisions(Transform* transform, double dt, bool*
                         }
 
                         velocity[i] = 0;
+                        input_velocity[i] = 0;
 
                         double penetrationDepth;
 
@@ -154,6 +156,7 @@ void CollisionDetector::ResolveCollisions(Transform* transform, double dt, bool*
     }
 
     transform->velocity = velocity;
+    transform->input_velocity = input_velocity;
 }
 
 } // namespace terra
