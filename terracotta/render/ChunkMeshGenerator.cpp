@@ -300,7 +300,7 @@ std::ostream& operator<<(std::ostream& out, const glm::vec3& vec) {
 }
 
 void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& top_left, glm::vec3& top_right, const glm::vec3& rotations, glm::vec3 offset = glm::vec3(0.5, 0.5, 0.5)) {
-    glm::quat quat = glm::identity<glm::quat>();
+    glm::quat quat(1, 0, 0, 0);
 
     const float kToRads = (float)M_PI / 180.0f;
 
@@ -328,7 +328,7 @@ void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& 
 void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& top_left, glm::vec3& top_right, const glm::vec3& variant_rotation, const block::ElementRotation& rotation) {
     glm::vec3 rotations(rotation.angle, rotation.angle, rotation.angle);
 
-    glm::quat quat = glm::identity<glm::quat>();
+    glm::quat quat(1, 0, 0, 0);
 
     const float kToRads = (float)M_PI / 180.0f;
 
@@ -345,7 +345,7 @@ void ApplyRotations(glm::vec3& bottom_left, glm::vec3& bottom_right, glm::vec3& 
     }
     
     if (rotation.rescale) {
-        rotations = rotations * (1.0f / std::cosf(3.14159f / 4.0f) - 1.0f);
+        rotations = rotations * (1.0f / std::cos(3.14159f / 4.0f) - 1.0f);
     }
 
     // Hadamard product to get just the one axis rotation

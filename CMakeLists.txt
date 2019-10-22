@@ -34,6 +34,8 @@ add_executable(terracotta
     terracotta/ChatWindow.h
     terracotta/Chunk.cpp
     terracotta/Chunk.h
+    terracotta/Collision.h
+    terracotta/Collision.cpp
     terracotta/Game.cpp
     terracotta/Game.h
     terracotta/GameWindow.cpp
@@ -58,6 +60,7 @@ add_executable(terracotta
     terracotta/math/volumes/Frustum.cpp
     terracotta/math/volumes/Frustum.h
     terracotta/PriorityQueue.h
+    terracotta/Transform.h
     terracotta/render/ChunkMesh.cpp
     terracotta/render/ChunkMesh.h
     terracotta/render/ChunkMeshGenerator.cpp
@@ -79,7 +82,8 @@ if (WIN32)
 set(GL_LIBRARY opengl32)
 else()
 set(GL_LIBRARY GL)
+set(OTHER_LIBS pthread glfw)
 endif()
 
 target_include_directories(terracotta PRIVATE ${MCLIB_INCLUDE_DIR} ${GLFW3_INCLUDE_DIR} ${GLM_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
-target_link_libraries(terracotta PRIVATE ${GL_LIBRARY} ${MCLIB_LIBRARY} ${GLFW3_LIBRARY} ${GLEW_LIBRARY})
+target_link_libraries(terracotta PRIVATE ${GL_LIBRARY} ${MCLIB_LIBRARY} ${GLFW3_LIBRARY} ${GLEW_LIBRARY} ${OTHER_LIBS})
